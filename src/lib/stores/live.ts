@@ -1,6 +1,7 @@
 import type { AudioEvent } from '../domain/events'
 import type { ChannelTargets } from '../domain/mapping'
 import { AudioEngine, type ChannelId } from '../audio/engine'
+import { defaultTimbre, type TimbreName } from '../audio/timbres'
 import { Recorder } from '../audio/recorder'
 import { fetchWeather } from '../weather/openMeteo'
 import { loadLastPlace, loadMix, saveLastPlace, saveMix } from './persistence'
@@ -8,6 +9,7 @@ import { Session, type EngineLike } from './session'
 
 class DeferredEngine implements EngineLike {
   private readonly mix = new Map<ChannelId, { gain: number; muted: boolean }>()
+  private readonly timbres = new Map<ChannelId, TimbreName>()
   private readonly built: () => AudioEngine
   private target: { targets: ChannelTargets; tau: number } | null = null
   private frozen = false
@@ -23,6 +25,9 @@ class DeferredEngine implements EngineLike {
       this.engine = this.built()
       for (const [id, state] of this.mix) {
         this.engine.setMix(id, state.gain, state.muted)
+      }
+      for (const [id, name] of this.timbres) {
+        this.engine.setTimbre(id, name)
       }
       if (this.target) {
         this.engine.applyTargets(this.target.targets, this.target.tau)
@@ -61,6 +66,15 @@ class DeferredEngine implements EngineLike {
   setMix(channel: ChannelId, gain: number, muted: boolean): void {
     this.mix.set(channel, { gain, muted })
     this.engine?.setMix(channel, gain, muted)
+  }
+
+  setTimbre(channel: ChannelId, name: TimbreName): void {
+    if (name === defaultTimbre(channel)) {
+      this.timbres.delete(channel)
+    } else {
+      this.timbres.set(channel, name)
+    }
+    this.engine?.setTimbre(channel, name)
   }
 
   setFrozen(frozen: boolean): void {

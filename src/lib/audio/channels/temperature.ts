@@ -1,5 +1,6 @@
 import { DORIAN, midiToHz } from '../../domain/harmony'
 import type { InstrumentChannel } from '../engine'
+import type { TimbreName } from '../timbres'
 
 interface TemperatureTarget {
   level: number
@@ -7,8 +8,42 @@ interface TemperatureTarget {
   root: number
 }
 
+interface Profile {
+  type: OscillatorType
+  offsets: number[]
+  level: number
+  lfoRate: number
+  lfoDepth: number
+}
+
 const MAX_PARTIALS = 6
 const BARS_PER_PHRASE = 8
+
+const SHIMMER: Profile = {
+  type: 'sine',
+  offsets: Array.from({ length: MAX_PARTIALS }, (_, i) => DORIAN[(i * 2) % DORIAN.length] ?? 0),
+  level: 0.08,
+  lfoRate: 0.07,
+  lfoDepth: 0.02,
+}
+
+const BELL: Profile = {
+  type: 'triangle',
+  offsets: [0, 7, 12, 19, 24, 28],
+  level: 0.07,
+  lfoRate: 0.05,
+  lfoDepth: 0.01,
+}
+
+const AIR: Profile = {
+  type: 'sine',
+  offsets: [12, 19, 24, 31, 36, 43],
+  level: 0.05,
+  lfoRate: 0.18,
+  lfoDepth: 0.25,
+}
+
+const PROFILES: Record<string, Profile> = { shimmer: SHIMMER, bell: BELL, air: AIR }
 
 export class TemperatureChannel implements InstrumentChannel {
   readonly output: GainNode
@@ -16,11 +51,16 @@ export class TemperatureChannel implements InstrumentChannel {
   private readonly voices: OscillatorNode[]
   private readonly gains: GainNode[]
   private readonly lfo: OscillatorNode
+  private readonly profile: Profile
   private level = 0
   private root = 38
   private partials = 2
 
-  constructor(private readonly ctx: AudioContext) {
+  constructor(
+    private readonly ctx: AudioContext,
+    timbre: TimbreName = 'shimmer',
+  ) {
+    this.profile = PROFILES[timbre] ?? SHIMMER
     this.output = ctx.createGain()
     this.output.gain.value = 1
 
@@ -29,7 +69,7 @@ export class TemperatureChannel implements InstrumentChannel {
 
     for (let i = 0; i < MAX_PARTIALS; i += 1) {
       const voice = ctx.createOscillator()
-      voice.type = 'sine'
+      voice.type = this.profile.type
       const gain = ctx.createGain()
       gain.gain.value = 0
       voice.connect(gain)
@@ -41,9 +81,9 @@ export class TemperatureChannel implements InstrumentChannel {
 
     this.lfo = ctx.createOscillator()
     this.lfo.type = 'sine'
-    this.lfo.frequency.value = 0.07
+    this.lfo.frequency.value = this.profile.lfoRate
     const lfoGain = ctx.createGain()
-    lfoGain.gain.value = 0.02
+    lfoGain.gain.value = this.profile.lfoDepth
     this.lfo.connect(lfoGain)
     lfoGain.connect(this.output.gain)
     this.lfo.start()
@@ -60,10 +100,10 @@ export class TemperatureChannel implements InstrumentChannel {
       const voice = this.voices[i]
       const gain = this.gains[i]
       if (!voice || !gain) continue
-      const offset = DORIAN[(i * 2) % DORIAN.length] ?? 0
+      const offset = this.profile.offsets[i] ?? 0
       voice.frequency.setTargetAtTime(midiToHz(this.root + 24 + offset), now, tau)
       const active = i < this.partials
-      gain.gain.setTargetAtTime(active ? this.level * 0.08 : 0, now, tau)
+      gain.gain.setTargetAtTime(active ? this.level * this.profile.level : 0, now, tau)
     }
   }
 
@@ -72,7 +112,7 @@ export class TemperatureChannel implements InstrumentChannel {
     for (let i = 0; i < this.partials; i += 1) {
       const gain = this.gains[i]
       if (!gain) continue
-      const peak = Math.max(0.001, this.level * 0.12)
+      const peak = Math.max(0.001, this.level * this.profile.level * 1.5)
       gain.gain.cancelScheduledValues(time)
       gain.gain.setValueAtTime(peak, time)
       gain.gain.exponentialRampToValueAtTime(peak * 0.2, time + 6)

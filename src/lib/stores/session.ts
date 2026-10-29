@@ -5,6 +5,7 @@ import { mapWeather } from '../domain/mapping'
 import type { WeatherReading } from '../domain/types'
 import { clamp } from '../domain/units'
 import { CHANNELS, type ChannelId } from '../audio/engine'
+import { defaultTimbre, defaultTimbres, isTimbre, type TimbreName } from '../audio/timbres'
 import { latestOnly } from '../weather/latest'
 import type { WeatherSnapshot } from '../weather/openMeteo'
 import type { Place } from '../weather/photon'
@@ -17,6 +18,7 @@ export const MAX_CHANNEL_GAIN = 1.5
 export interface Mix {
   gain: Record<ChannelId, number>
   muted: Record<ChannelId, boolean>
+  timbre: Record<ChannelId, TimbreName>
 }
 
 export interface EngineLike {
@@ -27,6 +29,7 @@ export interface EngineLike {
   setMix(channel: ChannelId, gain: number, muted: boolean): void
   setMaster(value: number): void
   setFrozen(frozen: boolean): void
+  setTimbre(channel: ChannelId, name: TimbreName): void
   fire(events: AudioEvent[]): void
 }
 
@@ -59,6 +62,7 @@ export interface SessionState {
   master: number
   channelGain: Record<ChannelId, number>
   channelMuted: Record<ChannelId, boolean>
+  timbre: Record<ChannelId, TimbreName>
 }
 
 function channelMap<T>(value: T): Record<ChannelId, T> {
@@ -72,6 +76,7 @@ function channelMap<T>(value: T): Record<ChannelId, T> {
 function normalizeMix(mix: Mix | null): Mix {
   const gain = channelMap(1)
   const muted = channelMap(false)
+  const timbre = defaultTimbres()
   if (mix) {
     for (const id of CHANNELS) {
       const value = mix.gain?.[id]
@@ -79,9 +84,13 @@ function normalizeMix(mix: Mix | null): Mix {
         gain[id] = clamp(value, 0, MAX_CHANNEL_GAIN)
       }
       muted[id] = mix.muted?.[id] === true
+      const name = mix.timbre?.[id]
+      if (typeof name === 'string' && isTimbre(id, name)) {
+        timbre[id] = name
+      }
     }
   }
-  return { gain, muted }
+  return { gain, muted, timbre }
 }
 
 export class Session {
@@ -107,9 +116,13 @@ export class Session {
       master: 0.8,
       channelGain: mix.gain,
       channelMuted: mix.muted,
+      timbre: mix.timbre,
     }
     for (const id of CHANNELS) {
       deps.engine.setMix(id, mix.gain[id], mix.muted[id])
+      if (mix.timbre[id] !== defaultTimbre(id)) {
+        deps.engine.setTimbre(id, mix.timbre[id])
+      }
     }
   }
 
@@ -197,6 +210,14 @@ export class Session {
     this.deps.engine.setMaster(master)
   }
 
+  setTimbre(id: ChannelId, name: TimbreName): void {
+    if (!isTimbre(id, name)) return
+    if (this.state.timbre[id] === name) return
+    this.set({ timbre: { ...this.state.timbre, [id]: name } })
+    this.deps.engine.setTimbre(id, name)
+    this.persistMix()
+  }
+
   toggleFreeze(): void {
     const frozen = !this.state.frozen
     this.set({ frozen })
@@ -268,6 +289,7 @@ export class Session {
     this.deps.saveMix?.({
       gain: this.state.channelGain,
       muted: this.state.channelMuted,
+      timbre: this.state.timbre,
     })
   }
 

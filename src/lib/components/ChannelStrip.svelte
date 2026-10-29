@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import type { ChannelId } from '../audio/engine'
+  import type { TimbreName, TimbreOption } from '../audio/timbres'
 
   interface Props {
     id: ChannelId
@@ -7,11 +9,29 @@
     value: number
     gain: number
     muted: boolean
+    timbre: TimbreName
+    timbreOptions: TimbreOption[]
     onGain: (value: number) => void
     onToggleMute: () => void
+    onNextTimbre: () => void
+    onPickTimbre: (name: TimbreName) => void
   }
 
-  let { id, label, value, gain, muted, onGain, onToggleMute }: Props = $props()
+  let {
+    id,
+    label,
+    value,
+    gain,
+    muted,
+    timbre,
+    timbreOptions,
+    onGain,
+    onToggleMute,
+    onNextTimbre,
+    onPickTimbre,
+  }: Props = $props()
+
+  const HOLD_MS = 500
 
   const NAMES: Record<ChannelId, string> = {
     wind: 'Wind',
@@ -22,9 +42,64 @@
     temperature: 'Temperature',
   }
 
+  let menuOpen = $state(false)
+  let held = false
+  let pressTimer: ReturnType<typeof setTimeout> | null = null
+
+  const current = $derived(
+    timbreOptions.find((option) => option.name === timbre) ?? timbreOptions[0],
+  )
+
+  function clearPress(): void {
+    if (pressTimer !== null) {
+      clearTimeout(pressTimer)
+      pressTimer = null
+    }
+  }
+
+  function startPress(): void {
+    clearPress()
+    held = false
+    pressTimer = setTimeout(() => {
+      pressTimer = null
+      held = true
+      menuOpen = true
+    }, HOLD_MS)
+  }
+
+  function endPress(): void {
+    clearPress()
+    if (held) {
+      held = false
+      return
+    }
+    onNextTimbre()
+  }
+
+  function cancelPress(): void {
+    clearPress()
+    held = false
+  }
+
+  function pick(name: TimbreName): void {
+    menuOpen = false
+    onPickTimbre(name)
+  }
+
   function stop(event: Event): void {
     event.stopPropagation()
   }
+
+  onDestroy(clearPress)
+
+  $effect(() => {
+    if (!menuOpen) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') menuOpen = false
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
 </script>
 
 <div class="strip">
@@ -61,8 +136,51 @@
     </div>
   </div>
 
+  <button
+    type="button"
+    class="timbre"
+    aria-haspopup="dialog"
+    aria-expanded={menuOpen}
+    aria-label={`${NAMES[id]} timbre: ${current?.label ?? timbre}. Tap to cycle, hold to choose`}
+    title={`${current?.label ?? timbre} · tap to cycle, hold for all`}
+    onpointerdown={startPress}
+    onpointerup={endPress}
+    onpointerleave={cancelPress}
+    onpointercancel={cancelPress}
+    oncontextmenu={(event) => event.preventDefault()}
+    onclick={(event) => {
+      if (event.detail === 0) onNextTimbre()
+    }}
+  >
+    {current?.label ?? timbre}
+  </button>
+
   <span class="label">{label}</span>
 </div>
+
+{#if menuOpen}
+  <div class="menu-layer">
+    <button
+      type="button"
+      class="backdrop"
+      aria-label="Close timbre menu"
+      onclick={() => (menuOpen = false)}
+    ></button>
+    <div class="menu" role="dialog" aria-label={`${NAMES[id]} timbre`}>
+      <span class="menu-title">{NAMES[id]}</span>
+      {#each timbreOptions as option (option.name)}
+        <button
+          type="button"
+          class:active={option.name === timbre}
+          aria-pressed={option.name === timbre}
+          onclick={() => pick(option.name)}
+        >
+          {option.label}
+        </button>
+      {/each}
+    </div>
+  </div>
+{/if}
 
 <style>
   .strip {
@@ -146,11 +264,99 @@
     transition: height 600ms linear;
   }
 
+  .timbre {
+    max-width: 100%;
+    padding: 2px 5px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    color: var(--sage-dark);
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: pointer;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  .timbre:hover,
+  .timbre:focus-visible {
+    background: var(--sand);
+    color: var(--forest);
+  }
+
   .label {
     font-family: var(--font-mono);
     font-size: 9px;
     letter-spacing: 0.1em;
     color: var(--forest-muted);
+  }
+
+  .menu-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0 16px 28px;
+    background: rgba(34, 37, 20, 0.28);
+  }
+
+  .backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    cursor: default;
+  }
+
+  .menu {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 200px;
+    padding: 10px;
+    background: var(--parchment);
+    border: 1px solid var(--sand-dark);
+    border-radius: 14px;
+    box-shadow: 0 16px 40px rgba(34, 37, 20, 0.2);
+  }
+
+  .menu-title {
+    padding: 2px 10px 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--forest-muted);
+  }
+
+  .menu button {
+    padding: 9px 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    font-family: inherit;
+    font-size: 14px;
+    text-align: left;
+    color: var(--forest);
+    cursor: pointer;
+  }
+
+  .menu button:hover {
+    background: var(--sand);
+  }
+
+  .menu button.active {
+    background: var(--forest);
+    color: var(--parchment);
   }
 
   @media (min-width: 900px) {
@@ -161,6 +367,10 @@
 
     .fader input {
       width: 136px;
+    }
+
+    .menu-layer {
+      align-items: center;
     }
   }
 </style>

@@ -1,11 +1,27 @@
 import { DORIAN, midiToHz } from '../../domain/harmony'
 import type { InstrumentChannel } from '../engine'
+import type { TimbreName } from '../timbres'
 
 interface HumidityTarget {
   level: number
   cutoff: number
   root: number
 }
+
+interface Profile {
+  type: OscillatorType
+  detunes: [number, number, number]
+  octave: number
+  q: number
+  cutoffScale: number
+  level: number
+}
+
+const PAD: Profile = { type: 'triangle', detunes: [-6, 0, 6], octave: 0, q: 0.5, cutoffScale: 1, level: 0.22 }
+const CHOIR: Profile = { type: 'sine', detunes: [-14, 0, 14], octave: 0, q: 1.2, cutoffScale: 1.8, level: 0.34 }
+const GLASS: Profile = { type: 'sine', detunes: [-40, 0, 40], octave: 12, q: 6, cutoffScale: 3.2, level: 0.16 }
+
+const PROFILES: Record<string, Profile> = { pad: PAD, choir: CHOIR, glass: GLASS }
 
 const VOICE_DEGREES = [0, 2, 4]
 const BARS_PER_PHRASE = 8
@@ -16,22 +32,27 @@ export class HumidityChannel implements InstrumentChannel {
   private readonly filter: BiquadFilterNode
   private readonly gain: GainNode
   private readonly voices: OscillatorNode[]
+  private readonly profile: Profile
   private root = 38
   private chordIndex = 0
 
-  constructor(private readonly ctx: AudioContext) {
+  constructor(
+    private readonly ctx: AudioContext,
+    timbre: TimbreName = 'pad',
+  ) {
+    this.profile = PROFILES[timbre] ?? PAD
     this.output = ctx.createGain()
     this.gain = ctx.createGain()
     this.gain.gain.value = 0
 
     this.filter = ctx.createBiquadFilter()
     this.filter.type = 'lowpass'
-    this.filter.frequency.value = 800
-    this.filter.Q.value = 0.5
+    this.filter.frequency.value = 800 * this.profile.cutoffScale
+    this.filter.Q.value = this.profile.q
 
-    this.voices = [-6, 0, 6].map((detune) => {
+    this.voices = this.profile.detunes.map((detune) => {
       const voice = ctx.createOscillator()
-      voice.type = 'triangle'
+      voice.type = this.profile.type
       voice.detune.value = detune
       voice.connect(this.filter)
       voice.start()
@@ -47,8 +68,8 @@ export class HumidityChannel implements InstrumentChannel {
     const humidity = target as HumidityTarget
     const now = this.ctx.currentTime
     this.root = humidity.root
-    this.gain.gain.setTargetAtTime(humidity.level * 0.22, now, Math.min(tau, 2))
-    this.filter.frequency.setTargetAtTime(humidity.cutoff, now, tau)
+    this.gain.gain.setTargetAtTime(humidity.level * this.profile.level, now, Math.min(tau, 2))
+    this.filter.frequency.setTargetAtTime(humidity.cutoff * this.profile.cutoffScale, now, tau)
     this.applyChord(Math.min(tau, 3))
   }
 
@@ -63,7 +84,7 @@ export class HumidityChannel implements InstrumentChannel {
     for (let i = 0; i < this.voices.length; i += 1) {
       const degree = VOICE_DEGREES[i] ?? 0
       const offset = DORIAN[(this.chordIndex + degree) % DORIAN.length] ?? 0
-      const note = this.root + 12 + offset
+      const note = this.root + 12 + offset + this.profile.octave
       this.voices[i]?.frequency.setTargetAtTime(midiToHz(note), now, tau)
     }
   }

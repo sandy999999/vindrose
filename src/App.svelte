@@ -10,6 +10,7 @@
   import LiveTrace from './lib/components/LiveTrace.svelte'
   import Toast from './lib/components/Toast.svelte'
   import { CHANNELS, type ChannelId } from './lib/audio/engine'
+  import { TIMBRES } from './lib/audio/timbres'
   import { MAX_RECORD_SECONDS } from './lib/audio/recorder'
   import { mapWeather } from './lib/domain/mapping'
   import { getSession } from './lib/stores/live'
@@ -132,6 +133,13 @@
     const total = Math.max(0, Math.floor(seconds))
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
   }
+
+  function cycleTimbre(id: ChannelId): void {
+    const options = TIMBRES[id]
+    const index = options.findIndex((option) => option.name === view.timbre[id])
+    const next = options[(index + 1) % options.length]
+    if (next) session.setTimbre(id, next.name)
+  }
 </script>
 
 <div class="deck">
@@ -162,8 +170,12 @@
             value={levels[strip.id]}
             gain={view.channelGain[strip.id]}
             muted={view.channelMuted[strip.id]}
+            timbre={view.timbre[strip.id]}
+            timbreOptions={TIMBRES[strip.id]}
             onGain={(value) => session.setChannelGain(strip.id, value)}
             onToggleMute={() => session.toggleMute(strip.id)}
+            onNextTimbre={() => cycleTimbre(strip.id)}
+            onPickTimbre={(name) => session.setTimbre(strip.id, name)}
           />
         {/each}
       </div>

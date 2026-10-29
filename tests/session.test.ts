@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Session } from '../src/lib/stores/session'
 import type { SessionDeps, EngineLike, RecorderLike } from '../src/lib/stores/session'
+import { defaultTimbre } from '../src/lib/audio/timbres'
 import type { ChannelTargets } from '../src/lib/domain/mapping'
 import type { WeatherReading } from '../src/lib/domain/types'
 import type { Place } from '../src/lib/weather/photon'
@@ -30,6 +31,7 @@ class FakeEngine implements EngineLike {
   mixes: Array<{ id: string; gain: number; muted: boolean }> = []
   master: number[] = []
   frozen = false
+  timbres: Array<{ id: string; name: string }> = []
 
   async start(): Promise<void> {
     this.started += 1
@@ -51,6 +53,9 @@ class FakeEngine implements EngineLike {
   }
   setFrozen(frozen: boolean): void {
     this.frozen = frozen
+  }
+  setTimbre(id: string, name: string): void {
+    this.timbres.push({ id, name })
   }
   fire(events: unknown[]): void {
     this.events.push(...events)
@@ -226,6 +231,65 @@ describe('Session', () => {
 
     session.setMaster(0.35)
     expect(session.snapshot.master).toBe(0.35)
+
+    session.dispose()
+  })
+
+  it('uses the default timbre for every channel before any choice', () => {
+    const { deps } = makeDeps()
+    const session = new Session(deps)
+
+    expect(session.snapshot.timbre.wind).toBe(defaultTimbre('wind'))
+    expect(session.snapshot.timbre.temperature).toBe(defaultTimbre('temperature'))
+
+    session.dispose()
+  })
+
+  it('rejects an unknown timbre and keeps the previous one', () => {
+    const { deps, engine } = makeDeps()
+    const session = new Session(deps)
+
+    session.setTimbre('wind', 'thunder')
+    expect(session.snapshot.timbre.wind).toBe(defaultTimbre('wind'))
+    expect(engine.timbres).toEqual([])
+
+    session.dispose()
+  })
+
+  it('stores, forwards and persists a valid timbre', () => {
+    const { deps, engine, saveMix } = makeDeps()
+    const session = new Session(deps)
+
+    session.setTimbre('wind', 'roar')
+
+    expect(session.snapshot.timbre.wind).toBe('roar')
+    expect(engine.timbres).toContainEqual({ id: 'wind', name: 'roar' })
+    expect(saveMix).toHaveBeenCalled()
+
+    session.dispose()
+  })
+
+  it('restores persisted timbres and restores the default for a bad stored name', () => {
+    const { deps, engine } = makeDeps({
+      loadMix: () => ({
+        gain: { wind: 1, gust: 1, rain: 1, pressure: 1, humidity: 1, temperature: 1 },
+        muted: { wind: false, gust: false, rain: false, pressure: false, humidity: false, temperature: false },
+        timbre: {
+          wind: 'whistle',
+          gust: 'not-a-timbre',
+          rain: 'patter',
+          pressure: 'sine',
+          humidity: 'pad',
+          temperature: 'shimmer',
+        },
+      }),
+    })
+    const session = new Session(deps)
+
+    expect(session.snapshot.timbre.wind).toBe('whistle')
+    expect(session.snapshot.timbre.rain).toBe('patter')
+    expect(session.snapshot.timbre.gust).toBe(defaultTimbre('gust'))
+    expect(engine.timbres).toContainEqual({ id: 'wind', name: 'whistle' })
 
     session.dispose()
   })

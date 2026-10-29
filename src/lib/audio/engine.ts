@@ -7,6 +7,8 @@ import { RainChannel } from './channels/rain'
 import { PressureChannel } from './channels/pressure'
 import { HumidityChannel } from './channels/humidity'
 import { TemperatureChannel } from './channels/temperature'
+import { TimbreChannel } from './channels/timbre'
+import { defaultTimbre, type TimbreName } from './timbres'
 import { createReverb } from './reverb'
 
 export type ChannelId = 'wind' | 'gust' | 'rain' | 'pressure' | 'humidity' | 'temperature'
@@ -45,6 +47,7 @@ export class AudioEngine {
   private readonly silence: GainNode
   private readonly scheduler: Scheduler
   private readonly channels = new Map<ChannelId, InstrumentChannel>()
+  private readonly timbreChannels = new Map<ChannelId, TimbreChannel>()
   private readonly mixGains = new Map<ChannelId, GainNode>()
   private readonly mix = new Map<ChannelId, MixState>()
   private started = false
@@ -79,12 +82,11 @@ export class AudioEngine {
       this.mix.set(id, { gain: 1, muted: false })
     }
 
-    this.attachChannel('wind', new WindChannel(ctx))
-    this.attachChannel('gust', new GustChannel(ctx))
-    this.attachChannel('rain', new RainChannel(ctx))
-    this.attachChannel('pressure', new PressureChannel(ctx))
-    this.attachChannel('humidity', new HumidityChannel(ctx))
-    this.attachChannel('temperature', new TemperatureChannel(ctx))
+    for (const id of CHANNELS) {
+      const channel = new TimbreChannel(ctx, (name) => this.createVoice(id, name), defaultTimbre(id))
+      this.timbreChannels.set(id, channel)
+      this.attachChannel(id, channel)
+    }
 
     this.scheduler = new Scheduler(
       BPM,
@@ -139,6 +141,10 @@ export class AudioEngine {
     this.mixGains.set(id, mixGain)
   }
 
+  setTimbre(channel: ChannelId, name: TimbreName): void {
+    this.timbreChannels.get(channel)?.setTimbre(name)
+  }
+
   applyTargets(targets: ChannelTargets, tau = 20): void {
     this.channels.get('wind')?.update(targets.wind, tau)
     this.channels.get('gust')?.update(targets.gust, tau)
@@ -188,6 +194,24 @@ export class AudioEngine {
       channel.dispose()
     }
     this.channels.clear()
+    this.timbreChannels.clear()
     this.mixGains.clear()
+  }
+
+  private createVoice(id: ChannelId, name: TimbreName): InstrumentChannel {
+    switch (id) {
+      case 'wind':
+        return new WindChannel(this.ctx, name)
+      case 'gust':
+        return new GustChannel(this.ctx, name)
+      case 'rain':
+        return new RainChannel(this.ctx, name)
+      case 'pressure':
+        return new PressureChannel(this.ctx, name)
+      case 'humidity':
+        return new HumidityChannel(this.ctx, name)
+      case 'temperature':
+        return new TemperatureChannel(this.ctx, name)
+    }
   }
 }
