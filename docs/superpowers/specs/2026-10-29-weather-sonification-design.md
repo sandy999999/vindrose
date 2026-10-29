@@ -132,6 +132,19 @@ Three layers, agreeing on the earlier decision:
    - Wind direction crossing a 45 degree sector: a stereo sweep.
    - Temperature crossing an integer: a single shimmer note.
 
+Location switching and first load. On first load the engine starts on a neutral
+bed as soon as the user taps play, before any reading exists, and glides into
+the real values as soon as the fetch resolves. Picking a new place retunes fast
+with a 2.5 s smoothing constant instead of the normal 20 s, so it reads as
+tuning into a station rather than morphing one place into another. Channel
+faders keep their positions across places.
+
+Faders. The weather sets each channel's target level. The user fader is a
+multiplier from 0 to 1.5 on that level and does not touch secondary parameters
+like filter cutoff. The tiny bar beside each fader shows the live weather
+parameter, not the post-fader output. Mute is a full cut after the multiplier.
+Faders and mutes persist across places and across reloads.
+
 Tempo, key and scale are fixed per session rather than weather derived:
 D Dorian. Pressure moves the harmonic root slowly between D, C, G and A, always
 diatonic. Temperature selects extension brightness, not the scale. This is
@@ -172,16 +185,22 @@ events while the bed keeps playing. Freeze is useful while recording.
 
 ## Recording and export
 
-- A `MediaStreamAudioDestinationNode` taps the master after the compressor.
-- `MediaRecorder` with `audio/webm;codecs=opus` on Chrome and Android,
-  `audio/mp4` on Safari.
-- On stop, the blob is decoded with `decodeAudioData` and re-encoded to 16 bit
-  PCM WAV in a worker. If decoding fails, the raw blob downloads instead and
-  the UI says so.
-- File name: `vindrose-<place-slug>-<yyyy-mm-dd-hhmm>.wav`.
-- Recording continues while the sheet is collapsed and while the phone screen
-  is on. A red dot and elapsed time stay visible in the peek state.
-- Maximum recording length is 30 minutes, then it stops and saves.
+- The tap is an `AudioWorkletNode` inserted after the compressor and before the
+  master gain, so monitoring volume and mute never change the file. Freeze is
+  the way to quiet the output while recording.
+- The worklet posts mono or stereo `Float32Array` blocks to the main thread; a
+  small encoder converts each block to 16 bit PCM immediately and appends it to
+  a chunk list. Nothing holds a full float buffer and the WAV is built by
+  concatenating chunks on stop.
+- Output is always 44.1 kHz 16 bit stereo WAV. No `MediaRecorder`, no codec
+  branching, no decode step.
+- File name: `vindrose-<place-slug>-<yyyy-mm-dd-hhmm>.wav` using the place that
+  was active when recording started.
+- Recording continues while the sheet is collapsed. A red dot and elapsed time
+  stay visible in the peek state.
+- Hard stop at 10 minutes with a warning at 8, because 10 minutes of stereo
+  PCM is about 105 MB in memory. Longer takes are deferred to an opus path.
+- Switching place mid-recording keeps recording and does not rename the file.
 
 ## Tech decisions
 
@@ -199,6 +218,12 @@ These are the builder's calls unless flagged:
   against a written checklist.
 - **No back end, no analytics, no cookies.** Deployment to Vercel static is
   optional and outside this spec.
+- **Browser scope.** Mobile Safari on iOS 16 and Chrome on Android are the
+  required targets. Desktop Chrome and Safari must work. Firefox is best effort
+  and may lack the recording worklet; playback must still work there.
+- **Performance baseline.** A 2021 mid-range Android phone, four years old by
+  now, defines the grain budget. The quality toggle defaults to high on desktop
+  and low on mobile.
 - State in Svelte stores plus `localStorage` for the last location only.
 
 ## Accessibility and mobile
@@ -212,8 +237,8 @@ These are the builder's calls unless flagged:
 
 ## Risks
 
-- **iOS recording.** Codec support differs and `decodeAudioData` may reject
-  webm. Mitigation: try wav, fall back to the raw blob with a clear label.
+- **Recording memory.** Ten minutes of stereo PCM is about 105 MB. Mitigation:
+  the hard cap, chunked encoding, and a clear warning before the stop.
 - **Tile provider.** OpenFreeMap is a small free service. Mitigation: raster
   fallback and a neutral background map colour if both fail.
 - **Phone CPU.** Grain clouds are the risk. Mitigation: voice budget, 48 grains
@@ -238,6 +263,14 @@ These are the builder's calls unless flagged:
 - Humidity is a soft pad, not a detune.
 - Map deck, phone first.
 - Six channels, one data source per channel.
+
+Calls made after the builder review, so they are visible and easy to reverse:
+
+- Recording is always WAV from an AudioWorklet PCM capture, hard stop at 10
+  minutes. No MediaRecorder, no codec branching.
+- The recording tap sits before master volume and mute.
+- Location switches retune in 2.5 s and keep the current mix.
+- User faders are gain multipliers on the weather-driven level.
 
 ## Left to the builder
 
