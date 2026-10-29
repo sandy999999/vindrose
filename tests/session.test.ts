@@ -28,6 +28,7 @@ class FakeEngine implements EngineLike {
   targets: ChannelTargets[] = []
   events: unknown[] = []
   mixes: Array<{ id: string; gain: number; muted: boolean }> = []
+  master: number[] = []
   frozen = false
 
   async start(): Promise<void> {
@@ -45,7 +46,9 @@ class FakeEngine implements EngineLike {
   setMix(id: string, gain: number, muted: boolean): void {
     this.mixes.push({ id, gain, muted })
   }
-  setMaster(): void {}
+  setMaster(value: number): void {
+    this.master.push(value)
+  }
   setFrozen(frozen: boolean): void {
     this.frozen = frozen
   }
@@ -193,6 +196,36 @@ describe('Session', () => {
 
     expect(result?.durationSec).toBe(3)
     expect(session.snapshot.recording).toBe(false)
+
+    session.dispose()
+  })
+
+  it('mutes every channel in one action and unmutes them again', () => {
+    const { deps, saveMix } = makeDeps()
+    const session = new Session(deps)
+
+    session.toggleMuteAll()
+    expect(session.snapshot.channelMuted.wind).toBe(true)
+    expect(session.snapshot.channelMuted.temperature).toBe(true)
+
+    session.toggleMuteAll()
+    expect(session.snapshot.channelMuted.wind).toBe(false)
+    expect(session.snapshot.channelMuted.temperature).toBe(false)
+    expect(saveMix).toHaveBeenCalledTimes(2)
+
+    session.dispose()
+  })
+
+  it('clamps master volume and forwards it to the engine', () => {
+    const { deps, engine } = makeDeps()
+    const session = new Session(deps)
+
+    session.setMaster(1.4)
+    expect(session.snapshot.master).toBe(1)
+    expect(engine.master).toEqual([1])
+
+    session.setMaster(0.35)
+    expect(session.snapshot.master).toBe(0.35)
 
     session.dispose()
   })

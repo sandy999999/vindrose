@@ -158,6 +158,8 @@
     padding-top: 6px;
     touch-action: none;
     cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .grip {
@@ -171,6 +173,8 @@
     flex: 0 0 auto;
     padding: 0 18px 10px;
     cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .body {

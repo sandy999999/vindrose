@@ -25,6 +25,7 @@ export interface EngineLike {
   stop(): void
   applyTargets(targets: ChannelTargets, tau?: number): void
   setMix(channel: ChannelId, gain: number, muted: boolean): void
+  setMaster(value: number): void
   setFrozen(frozen: boolean): void
   fire(events: AudioEvent[]): void
 }
@@ -55,6 +56,7 @@ export interface SessionState {
   recording: boolean
   stale: boolean
   frozen: boolean
+  master: number
   channelGain: Record<ChannelId, number>
   channelMuted: Record<ChannelId, boolean>
 }
@@ -102,6 +104,7 @@ export class Session {
       recording: false,
       stale: false,
       frozen: false,
+      master: 0.8,
       channelGain: mix.gain,
       channelMuted: mix.muted,
     }
@@ -176,6 +179,22 @@ export class Session {
     this.set({ channelMuted: { ...this.state.channelMuted, [id]: muted } })
     this.deps.engine.setMix(id, this.state.channelGain[id], muted)
     this.persistMix()
+  }
+
+  toggleMuteAll(): void {
+    const anyAudible = CHANNELS.some((id) => !this.state.channelMuted[id])
+    const muted = channelMap(anyAudible)
+    this.set({ channelMuted: muted })
+    for (const id of CHANNELS) {
+      this.deps.engine.setMix(id, this.state.channelGain[id], muted[id])
+    }
+    this.persistMix()
+  }
+
+  setMaster(value: number): void {
+    const master = clamp(value, 0, 1)
+    this.set({ master })
+    this.deps.engine.setMaster(master)
   }
 
   toggleFreeze(): void {
