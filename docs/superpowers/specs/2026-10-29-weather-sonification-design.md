@@ -168,7 +168,7 @@ quiet half of the range stays useful.
 | wind | wind_speed_10m, 0 to 25 m/s | Two decorrelated pink noise beds through a bandpass, Q 0.7, centre 200 to 1200 Hz | Level from speed, cutoff from speed, stereo position from direction (pan equals sine of bearing) |
 | gust | gust minus sustained, 0 to 15 m/s | Short resonant clicks: 4 ms noise burst plus a sine ping, random pan | Presence and burst density from spread; events add clusters |
 | rain | precipitation, 0 to 10 mm/h | Granular droplets, 30 to 80 ms filtered noise grains, pitch quantised to the scale | Density from rate, grain pitch narrows toward the root as rate rises, plus a high hiss above 4 mm/h |
-| press | pressure_msl, 980 to 1030 hPa | Two operator FM drone, carrier 55 to 82 Hz, ratio 1.5 | Carrier follows the root, modulation index from pressure deviation, slow glide on tendency events |
+| press | pressure_msl, 980 to 1030 hPa | Two operator FM drone, carrier 65 to 110 Hz, ratio 1.5 | Carrier follows the root, modulation index from pressure deviation, slow glide on tendency events |
 | hum | relative_humidity_2m, 0 to 100% | Soft pad, three detuned triangle voices, 4 s attack, 6 s release | Level from humidity, lowpass cutoff 300 to 3000 Hz, slow chord changes on phrase boundaries |
 | temp | temperature_2m, -20 to 30 C | Shimmer: high sine partials with ring modulation, long decay | Level from warmth, partial count from temperature, one note per phrase |
 
