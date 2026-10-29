@@ -1,0 +1,14 @@
+:root {
+  --parchment: #e8e5db;
+  --parchment-dim: #d4d1c7;
+  --forest: #222514;
+  --forest-muted: #363928;
+  --sage: #c4d1c6;
+  --sage-dark: #92a494;
+  --sand: #e4d9c5;
+  --sand-dark: #c6bba7;
+  --cream: #eeeada;
+  --cream-bright: #f8f5eb;
+  --font-mono: 'ModernDOS', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}

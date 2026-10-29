@@ -1,0 +1,40 @@
+@font-face {
+  font-family: 'ModernDOS';
+  src: url('/fonts/ModernDOS8x16.ttf') format('truetype');
+  font-display: block;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--parchment);
+  color: var(--forest);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100%;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--sage-dark);
+  outline-offset: 2px;
+}
