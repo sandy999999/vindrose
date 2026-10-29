@@ -1,6 +1,15 @@
 import { encodeWav, toInt16 } from './wav'
 
 export const MAX_RECORD_SECONDS = 600
+export const WARN_RECORD_SECONDS = 480
+
+export type RecordAlert = 'warn' | 'limit' | null
+
+export function recordAlert(elapsed: number, warned: boolean): RecordAlert {
+  if (elapsed >= MAX_RECORD_SECONDS) return 'limit'
+  if (elapsed >= WARN_RECORD_SECONDS && !warned) return 'warn'
+  return null
+}
 
 interface CaptureMessage {
   left: Float32Array
@@ -8,14 +17,11 @@ interface CaptureMessage {
 }
 
 export class Recorder {
-  onLimit: (() => void) | null = null
-
   private readonly chunks: Int16Array[] = []
   private frames = 0
-  private startedAt = 0
   private recording = false
 
-  private constructor(
+  constructor(
     private readonly ctx: AudioContext,
     private readonly node: AudioWorkletNode,
   ) {
@@ -50,14 +56,12 @@ export class Recorder {
   }
 
   get elapsed(): number {
-    if (!this.recording) return 0
-    return this.ctx.currentTime - this.startedAt
+    return this.frames / this.ctx.sampleRate
   }
 
   start(): void {
     this.chunks.length = 0
     this.frames = 0
-    this.startedAt = this.ctx.currentTime
     this.recording = true
   }
 
@@ -85,7 +89,6 @@ export class Recorder {
 
     if (this.frames / this.ctx.sampleRate >= MAX_RECORD_SECONDS) {
       this.recording = false
-      this.onLimit?.()
     }
   }
 }

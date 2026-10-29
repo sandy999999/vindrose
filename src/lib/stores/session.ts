@@ -28,6 +28,7 @@ export interface EngineLike {
   applyTargets(targets: ChannelTargets, tau?: number): void
   setMix(channel: ChannelId, gain: number, muted: boolean): void
   setMaster(value: number): void
+  setMutedAll(muted: boolean): void
   setFrozen(frozen: boolean): void
   setTimbre(channel: ChannelId, name: TimbreName): void
   fire(events: AudioEvent[]): void
@@ -60,6 +61,7 @@ export interface SessionState {
   stale: boolean
   frozen: boolean
   master: number
+  mutedAll: boolean
   channelGain: Record<ChannelId, number>
   channelMuted: Record<ChannelId, boolean>
   timbre: Record<ChannelId, TimbreName>
@@ -98,6 +100,7 @@ export class Session {
   private readonly listeners = new Set<(state: SessionState) => void>()
   private state: SessionState
   private recorder: RecorderLike | null = null
+  private recordingPlace: Place | null = null
   private timer: ReturnType<typeof setInterval> | null = null
   private requestId = 0
   private prevReading: WeatherReading | null = null
@@ -114,6 +117,7 @@ export class Session {
       stale: false,
       frozen: false,
       master: 0.8,
+      mutedAll: false,
       channelGain: mix.gain,
       channelMuted: mix.muted,
       timbre: mix.timbre,
@@ -164,16 +168,23 @@ export class Session {
     if (this.state.recording || !this.deps.createRecorder) return
     const recorder = await this.deps.createRecorder()
     this.recorder = recorder
+    this.recordingPlace = this.state.place
     recorder.start()
     this.set({ recording: true })
   }
 
-  stopRecording(): { blob: Blob; durationSec: number } | null {
+  stopRecording(): {
+    blob: Blob
+    durationSec: number
+    place: Place | null
+  } | null {
     if (!this.recorder || !this.state.recording) return null
     const result = this.recorder.stop()
+    const place = this.recordingPlace
     this.recorder = null
+    this.recordingPlace = null
     this.set({ recording: false })
-    return result
+    return { ...result, place }
   }
 
   get recordingSeconds(): number {
@@ -195,13 +206,9 @@ export class Session {
   }
 
   toggleMuteAll(): void {
-    const anyAudible = CHANNELS.some((id) => !this.state.channelMuted[id])
-    const muted = channelMap(anyAudible)
-    this.set({ channelMuted: muted })
-    for (const id of CHANNELS) {
-      this.deps.engine.setMix(id, this.state.channelGain[id], muted[id])
-    }
-    this.persistMix()
+    const mutedAll = !this.state.mutedAll
+    this.set({ mutedAll })
+    this.deps.engine.setMutedAll(mutedAll)
   }
 
   setMaster(value: number): void {

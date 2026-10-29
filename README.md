@@ -37,8 +37,11 @@ browsers refuse to start an AudioContext without a user gesture.
   changes cross a threshold and fire an event instead.
 - **Recording** — the engine's tap is captured in an AudioWorklet, written
   as 16-bit stereo WAV at the AudioContext's sample rate (48 kHz on most
-  devices), and downloaded when you stop. The cap is ten minutes, about
-  105 MB of audio in memory at 44.1 kHz before it is written out.
+  devices), and downloaded when you stop. Master volume and `mute` are
+  monitor controls and never change the file; the channel faders and mutes
+  are the mix it captures. The cap is ten minutes with a warning at eight,
+  about 105 MB of audio in memory at 44.1 kHz before it is written out. The
+  file is named after the place that was active when recording started.
 
 ## Controls
 
@@ -47,7 +50,8 @@ mixer. Drag its handle, or focus it and use the arrow keys, to change its
 height.
 
 - **Fader** — channel volume, remembered between visits.
-- **Mute dot** — silences one channel; `mute` silences all.
+- **Mute dot** — silences one channel; `mute` silences all channels for
+  monitoring only, without changing a recording in progress.
 - **Timbre label** — tap to cycle, hold to choose from all three.
 - **Play / pause** — starts and stops the engine; a screen wake lock is held
   while playing.

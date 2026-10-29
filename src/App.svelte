@@ -9,11 +9,12 @@
   import Transport from './lib/components/Transport.svelte'
   import LiveTrace from './lib/components/LiveTrace.svelte'
   import Toast from './lib/components/Toast.svelte'
-  import { CHANNELS, type ChannelId } from './lib/audio/engine'
+  import type { ChannelId } from './lib/audio/engine'
   import { TIMBRES } from './lib/audio/timbres'
-  import { MAX_RECORD_SECONDS } from './lib/audio/recorder'
+  import { recordAlert } from './lib/audio/recorder'
   import { mapWeather } from './lib/domain/mapping'
   import { getSession } from './lib/stores/live'
+  import { latestResult } from './lib/weather/latest'
   import type { SessionState } from './lib/stores/session'
   import type { Place } from './lib/weather/photon'
   import { reversePlace } from './lib/weather/photon'
@@ -41,7 +42,9 @@
     humidity: targets?.humidity.level ?? 0,
     temperature: targets?.temperature.level ?? 0,
   })
-  const allMuted = $derived(CHANNELS.every((id) => view.channelMuted[id]))
+  const allMuted = $derived(view.mutedAll)
+  const reverse = latestResult<Place | null>()
+  let warned = false
 
   let wakeLock: WakeLockSentinel | null = null
 
@@ -104,8 +107,12 @@
     const timer = setInterval(() => {
       if (!session.snapshot.recording) return
       elapsed = session.recordingSeconds
-      if (elapsed >= MAX_RECORD_SECONDS) {
+      const alert = recordAlert(elapsed, warned)
+      if (alert === 'limit') {
         finishRecording(true)
+      } else if (alert === 'warn') {
+        warned = true
+        toast = '2 min left of 10'
       }
     }, 500)
     return () => clearInterval(timer)
@@ -116,14 +123,10 @@
   }
 
   async function pick(lat: number, lon: number): Promise<void> {
-    let place: Place | null = null
-    try {
-      place = await reversePlace(lat, lon)
-    } catch {
-      place = null
-    }
+    const result = await reverse(() => reversePlace(lat, lon).catch(() => null))
+    if (!result.fresh) return
     select(
-      place ?? {
+      result.value ?? {
         name: `${lat.toFixed(2)}, ${lon.toFixed(2)}`,
         lat,
         lon,
@@ -137,6 +140,8 @@
       finishRecording(false)
       return
     }
+    warned = false
+    elapsed = 0
     try {
       await session.startRecording()
     } catch {
@@ -146,18 +151,19 @@
 
   function finishRecording(limitReached: boolean): void {
     const result = session.stopRecording()
+    warned = false
     if (!result || result.blob.size <= 44) {
       toast = 'Nothing was recorded'
       return
     }
-    download(result.blob)
+    download(result.blob, result.place)
     const length = clock(result.durationSec)
     toast = limitReached ? `10 min limit reached · saved ${length}` : `Saved ${length}`
   }
 
-  function download(blob: Blob): void {
+  function download(blob: Blob, place: Place | null): void {
     const slug =
-      (view.place?.name ?? 'vindrose')
+      (place?.name ?? 'vindrose')
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '') || 'vindrose'

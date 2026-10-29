@@ -14,6 +14,7 @@ class DeferredEngine implements EngineLike {
   private target: { targets: ChannelTargets; tau: number } | null = null
   private frozen = false
   private master = 0.8
+  private mutedAll = false
   private engine: AudioEngine | null = null
 
   constructor(build: () => AudioEngine) {
@@ -34,6 +35,7 @@ class DeferredEngine implements EngineLike {
       }
       this.engine.setFrozen(this.frozen)
       this.engine.setMaster(this.master)
+      this.engine.setMutedAll(this.mutedAll)
     }
     return this.engine
   }
@@ -85,6 +87,11 @@ class DeferredEngine implements EngineLike {
   setMaster(value: number): void {
     this.master = value
     this.engine?.setMaster(value)
+  }
+
+  setMutedAll(muted: boolean): void {
+    this.mutedAll = muted
+    this.engine?.setMutedAll(muted)
   }
 
   fire(events: AudioEvent[]): void {

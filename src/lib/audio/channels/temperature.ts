@@ -1,4 +1,5 @@
 import { DORIAN, midiToHz } from '../../domain/harmony'
+import type { AudioEvent } from '../../domain/events'
 import type { InstrumentChannel } from '../engine'
 import type { TimbreName } from '../timbres'
 
@@ -117,6 +118,35 @@ export class TemperatureChannel implements InstrumentChannel {
       gain.gain.setValueAtTime(peak, time)
       gain.gain.exponentialRampToValueAtTime(peak * 0.2, time + 6)
     }
+  }
+
+  fire(event: AudioEvent): void {
+    if (event.type !== 'temperature-note') return
+    this.note(event.note)
+  }
+
+  private note(midi: number): void {
+    const ctx = this.ctx
+    const now = ctx.currentTime
+    const voice = ctx.createOscillator()
+    voice.type = this.profile.type
+    voice.frequency.setValueAtTime(midiToHz(midi), now)
+
+    const gain = ctx.createGain()
+    const peak = Math.max(0.02, this.level * this.profile.level * 1.5)
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.linearRampToValueAtTime(peak, now + 0.03)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 2.4)
+
+    voice.connect(gain)
+    gain.connect(this.output)
+    voice.onended = () => {
+      voice.disconnect()
+      gain.disconnect()
+    }
+
+    voice.start(now)
+    voice.stop(now + 2.5)
   }
 
   dispose(): void {

@@ -28,6 +28,11 @@ Setup: `npm run dev`, open the printed URL, pick a place, press play.
       through its three timbres while playing. Each must be recognisably
       itself (wind stays wind, rain stays rain) and none may be harsh at the
       default fader position.
+- [ ] **Threshold events are audible.** Wait for a weather update that
+      changes the integer temperature (one shimmer note), the wind sector
+      (a short sweep across the stereo field) or the rain state (a burst of
+      grains). Each gesture must be distinct from the bed and must not
+      double up with a gust burst. `freeze` must silence all of them.
 - [ ] **Recording duration matches elapsed time.** Record for exactly 30
       seconds by the transport clock, stop, and check the downloaded WAV is
       30 s within about 0.1 s. Repeat with the 10-minute cap: playback stops on

@@ -1,4 +1,5 @@
 import { midiToHz, quantizeToScale } from '../../domain/harmony'
+import type { AudioEvent, RainState } from '../../domain/events'
 import type { InstrumentChannel } from '../engine'
 import { createNoiseBuffer } from '../noise'
 import { barDuration } from '../scheduler'
@@ -11,6 +12,19 @@ interface RainTarget {
 
 const MAX_GRAINS = 24
 const BPM = 56
+
+export function rainBurstCount(state: RainState): number {
+  switch (state) {
+    case 'dry':
+      return 0
+    case 'drizzle':
+      return 3
+    case 'rain':
+      return 6
+    case 'heavy':
+      return 10
+  }
+}
 
 export class RainChannel implements InstrumentChannel {
   readonly output: GainNode
@@ -69,6 +83,15 @@ export class RainChannel implements InstrumentChannel {
     const span = barDuration(BPM)
     for (let i = 0; i < count; i += 1) {
       this.grain(time + Math.random() * span)
+    }
+  }
+
+  fire(event: AudioEvent): void {
+    if (event.type !== 'rain-change') return
+    const count = rainBurstCount(event.state)
+    const now = this.ctx.currentTime
+    for (let i = 0; i < count; i += 1) {
+      this.grain(now + Math.random() * 0.8)
     }
   }
 

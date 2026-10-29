@@ -1,3 +1,4 @@
+import type { AudioEvent } from '../../domain/events'
 import type { InstrumentChannel } from '../engine'
 import { createNoiseBuffer } from '../noise'
 import type { TimbreName } from '../timbres'
@@ -27,6 +28,7 @@ export class WindChannel implements InstrumentChannel {
   private readonly filter: BiquadFilterNode
   private readonly panner: StereoPannerNode
   private readonly source: AudioBufferSourceNode
+  private readonly sweepNoise: AudioBuffer
   private readonly profile: Profile
 
   constructor(
@@ -49,6 +51,8 @@ export class WindChannel implements InstrumentChannel {
     this.source.buffer = createNoiseBuffer(ctx, 4)
     this.source.loop = true
 
+    this.sweepNoise = createNoiseBuffer(ctx, 1.5)
+
     this.source.connect(this.filter)
     this.filter.connect(this.panner)
     this.panner.connect(this.output)
@@ -61,6 +65,44 @@ export class WindChannel implements InstrumentChannel {
     this.output.gain.setTargetAtTime(wind.level * this.profile.level, now, tau)
     this.filter.frequency.setTargetAtTime(wind.cutoff * this.profile.scale, now, tau)
     this.panner.pan.setTargetAtTime(wind.pan, now, tau)
+  }
+
+  fire(event: AudioEvent): void {
+    if (event.type !== 'direction-sweep') return
+    const ctx = this.ctx
+    const now = ctx.currentTime
+
+    const source = ctx.createBufferSource()
+    source.buffer = this.sweepNoise
+
+    const band = ctx.createBiquadFilter()
+    band.type = 'bandpass'
+    band.Q.value = Math.max(2, this.profile.q)
+    band.frequency.value = this.filter.frequency.value * 1.5
+
+    const gain = ctx.createGain()
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.linearRampToValueAtTime(0.12, now + 0.3)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.4)
+
+    const panner = ctx.createStereoPanner()
+    panner.pan.setValueAtTime(-event.pan, now)
+    panner.pan.linearRampToValueAtTime(event.pan, now + 1.1)
+
+    source.connect(band)
+    band.connect(gain)
+    gain.connect(panner)
+    panner.connect(this.output)
+
+    source.onended = () => {
+      source.disconnect()
+      band.disconnect()
+      gain.disconnect()
+      panner.disconnect()
+    }
+
+    source.start(now)
+    source.stop(now + 1.5)
   }
 
   dispose(): void {

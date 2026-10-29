@@ -30,6 +30,7 @@ class FakeEngine implements EngineLike {
   events: unknown[] = []
   mixes: Array<{ id: string; gain: number; muted: boolean }> = []
   master: number[] = []
+  mutedAll: boolean[] = []
   frozen = false
   timbres: Array<{ id: string; name: string }> = []
 
@@ -50,6 +51,9 @@ class FakeEngine implements EngineLike {
   }
   setMaster(value: number): void {
     this.master.push(value)
+  }
+  setMutedAll(muted: boolean): void {
+    this.mutedAll.push(muted)
   }
   setFrozen(frozen: boolean): void {
     this.frozen = frozen
@@ -205,18 +209,36 @@ describe('Session', () => {
     session.dispose()
   })
 
-  it('mutes every channel in one action and unmutes them again', () => {
-    const { deps, saveMix } = makeDeps()
+  it('returns the place that was active when the recording started', async () => {
+    const { deps } = makeDeps()
     const session = new Session(deps)
 
-    session.toggleMuteAll()
-    expect(session.snapshot.channelMuted.wind).toBe(true)
-    expect(session.snapshot.channelMuted.temperature).toBe(true)
+    await session.play()
+    await session.selectPlace(place)
+    await session.startRecording()
+    await session.selectPlace(otherPlace)
+    const result = session.stopRecording()
+
+    expect(result?.place).toEqual(place)
+
+    session.dispose()
+  })
+
+  it('mutes the master output without touching the channel mix', () => {
+    const { deps, engine, saveMix } = makeDeps()
+    const session = new Session(deps)
+    const mixesBefore = engine.mixes.length
 
     session.toggleMuteAll()
+    expect(session.snapshot.mutedAll).toBe(true)
+    expect(engine.mutedAll).toEqual([true])
     expect(session.snapshot.channelMuted.wind).toBe(false)
-    expect(session.snapshot.channelMuted.temperature).toBe(false)
-    expect(saveMix).toHaveBeenCalledTimes(2)
+    expect(engine.mixes).toHaveLength(mixesBefore)
+
+    session.toggleMuteAll()
+    expect(session.snapshot.mutedAll).toBe(false)
+    expect(engine.mutedAll).toEqual([true, false])
+    expect(saveMix).not.toHaveBeenCalled()
 
     session.dispose()
   })

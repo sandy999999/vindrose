@@ -32,9 +32,27 @@ export const CHANNELS: ChannelId[] = [
 
 export const BPM = 56
 
+const PAUSE_SETTLE_MS = 150
+const PAUSE_FADE = 0.015
+
 interface MixState {
   gain: number
   muted: boolean
+}
+
+export function eventTarget(event: AudioEvent): ChannelId {
+  switch (event.type) {
+    case 'gust-burst':
+      return 'gust'
+    case 'pressure-glide':
+      return 'pressure'
+    case 'rain-change':
+      return 'rain'
+    case 'direction-sweep':
+      return 'wind'
+    case 'temperature-note':
+      return 'temperature'
+  }
 }
 
 export class AudioEngine {
@@ -52,6 +70,9 @@ export class AudioEngine {
   private readonly mix = new Map<ChannelId, MixState>()
   private started = false
   private frozen = false
+  private masterValue = 0.8
+  private mutedAll = false
+  private pauseTimer: ReturnType<typeof setTimeout> | null = null
   private onBarHandler: ((time: number, bar: number) => void) | null = null
   private reverb: { setWet(wet: number, preDelay: number): void } | null = null
 
@@ -119,7 +140,10 @@ export class AudioEngine {
   }
 
   async start(): Promise<void> {
+    this.cancelPause()
     await this.resume()
+    this.bus.gain.cancelScheduledValues(this.ctx.currentTime)
+    this.bus.gain.setTargetAtTime(1, this.ctx.currentTime, 0.01)
     if (!this.started) {
       this.started = true
       this.scheduler.start(this.ctx.currentTime)
@@ -127,8 +151,24 @@ export class AudioEngine {
   }
 
   stop(): void {
+    if (!this.started) return
     this.scheduler.stop()
     this.started = false
+    const now = this.ctx.currentTime
+    this.bus.gain.cancelScheduledValues(now)
+    this.bus.gain.setTargetAtTime(0, now, PAUSE_FADE)
+    this.cancelPause()
+    this.pauseTimer = setTimeout(() => {
+      this.pauseTimer = null
+      if (!this.started) void this.ctx.suspend().catch(() => undefined)
+    }, PAUSE_SETTLE_MS)
+  }
+
+  private cancelPause(): void {
+    if (this.pauseTimer !== null) {
+      clearTimeout(this.pauseTimer)
+      this.pauseTimer = null
+    }
   }
 
   attachChannel(id: ChannelId, channel: InstrumentChannel): void {
@@ -172,6 +212,15 @@ export class AudioEngine {
   }
 
   setMaster(value: number): void {
+    this.masterValue = value
+    if (!this.mutedAll) {
+      this.master.gain.setTargetAtTime(value, this.ctx.currentTime, 0.05)
+    }
+  }
+
+  setMutedAll(muted: boolean): void {
+    this.mutedAll = muted
+    const value = muted ? 0 : this.masterValue
     this.master.gain.setTargetAtTime(value, this.ctx.currentTime, 0.05)
   }
 
@@ -182,13 +231,12 @@ export class AudioEngine {
   fire(events: AudioEvent[]): void {
     if (this.frozen) return
     for (const event of events) {
-      for (const channel of this.channels.values()) {
-        channel.fire?.(event)
-      }
+      this.channels.get(eventTarget(event))?.fire?.(event)
     }
   }
 
   dispose(): void {
+    this.cancelPause()
     this.scheduler.stop()
     for (const channel of this.channels.values()) {
       channel.dispose()
