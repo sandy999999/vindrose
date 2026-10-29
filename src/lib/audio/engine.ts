@@ -1,6 +1,9 @@
 import type { ChannelTargets } from '../domain/mapping'
 import type { AudioEvent } from '../domain/events'
 import { Scheduler } from './scheduler'
+import { WindChannel } from './channels/wind'
+import { GustChannel } from './channels/gust'
+import { RainChannel } from './channels/rain'
 
 export type ChannelId = 'wind' | 'gust' | 'rain' | 'pressure' | 'humidity' | 'temperature'
 
@@ -8,6 +11,7 @@ export interface InstrumentChannel {
   readonly output: GainNode
   update(target: unknown, tau: number): void
   fire?(event: AudioEvent): void
+  onBar?(time: number, bar: number): void
   dispose(): void
 }
 
@@ -67,9 +71,18 @@ export class AudioEngine {
       this.mix.set(id, { gain: 1, muted: false })
     }
 
+    this.attachChannel('wind', new WindChannel(ctx))
+    this.attachChannel('gust', new GustChannel(ctx))
+    this.attachChannel('rain', new RainChannel(ctx))
+
     this.scheduler = new Scheduler(
       BPM,
-      (time, bar) => this.onBarHandler?.(time, bar),
+      (time, bar) => {
+        this.onBarHandler?.(time, bar)
+        for (const channel of this.channels.values()) {
+          channel.onBar?.(time, bar)
+        }
+      },
       () => ctx.currentTime,
     )
   }
