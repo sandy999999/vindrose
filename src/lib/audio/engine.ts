@@ -4,6 +4,10 @@ import { Scheduler } from './scheduler'
 import { WindChannel } from './channels/wind'
 import { GustChannel } from './channels/gust'
 import { RainChannel } from './channels/rain'
+import { PressureChannel } from './channels/pressure'
+import { HumidityChannel } from './channels/humidity'
+import { TemperatureChannel } from './channels/temperature'
+import { createReverb } from './reverb'
 
 export type ChannelId = 'wind' | 'gust' | 'rain' | 'pressure' | 'humidity' | 'temperature'
 
@@ -60,7 +64,11 @@ export class AudioEngine {
     this.silence = ctx.createGain()
     this.silence.gain.value = 0
 
-    this.bus.connect(this.compressor)
+    const reverb = createReverb(ctx)
+    this.bus.connect(reverb.input)
+    reverb.output.connect(this.compressor)
+    this.attachReverb(reverb)
+
     this.compressor.connect(this.master)
     this.master.connect(ctx.destination)
     this.compressor.connect(this.tapNode)
@@ -74,6 +82,9 @@ export class AudioEngine {
     this.attachChannel('wind', new WindChannel(ctx))
     this.attachChannel('gust', new GustChannel(ctx))
     this.attachChannel('rain', new RainChannel(ctx))
+    this.attachChannel('pressure', new PressureChannel(ctx))
+    this.attachChannel('humidity', new HumidityChannel(ctx))
+    this.attachChannel('temperature', new TemperatureChannel(ctx))
 
     this.scheduler = new Scheduler(
       BPM,
