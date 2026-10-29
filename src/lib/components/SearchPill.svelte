@@ -191,8 +191,8 @@
   }
 
   input:focus {
-    border-color: var(--sage-dark);
-    box-shadow: 0 0 0 3px rgba(146, 164, 148, 0.22);
+    border-color: var(--forest-muted);
+    box-shadow: 0 0 0 3px rgba(146, 164, 148, 0.45);
   }
 
   input::-webkit-search-cancel-button {
@@ -220,6 +220,7 @@
     justify-content: space-between;
     gap: 12px;
     width: 100%;
+    min-height: 44px;
     padding: 10px 12px;
     border: 0;
     border-radius: 10px;

@@ -15,6 +15,7 @@
   const PEEK_PX = 96
   const HALF_RATIO = 0.42
   const FULL_RATIO = 0.88
+  const SNAP_NAMES = ['Collapsed', 'Half', 'Expanded']
 
   let viewportHeight = $state(844)
   let desktop = $state(false)
@@ -34,6 +35,22 @@
     snap = index
     height = snapHeights()[index]
     onSnap?.(index)
+  }
+
+  function onHandleKey(event: KeyboardEvent): void {
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      applySnap(Math.min(2, snap + 1) as Snap)
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      applySnap(Math.max(0, snap - 1) as Snap)
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      applySnap(0)
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      applySnap(2)
+    }
   }
 
   function beginDrag(event: PointerEvent): void {
@@ -99,11 +116,21 @@
   style:height={desktop ? '100%' : `${height}px`}
   aria-label="Weather and sound controls"
 >
+  <!-- A focusable separator with aria-valuenow is the ARIA resize-widget
+       pattern; Svelte's linter still treats the role as non-interactive. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     class="handle"
     role="separator"
+    tabindex="0"
     aria-orientation="horizontal"
-    aria-label="Drag to resize panel"
+    aria-label="Panel height"
+    aria-valuemin="0"
+    aria-valuemax="2"
+    aria-valuenow={snap}
+    aria-valuetext={SNAP_NAMES[snap]}
+    onkeydown={onHandleKey}
     onpointerdown={beginDrag}
     onpointermove={moveDrag}
     onpointerup={endDrag}
@@ -182,7 +209,7 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 0 18px 18px;
+    padding: 0 18px calc(18px + env(safe-area-inset-bottom));
   }
 
   .sheet.dragging .handle,
@@ -227,7 +254,7 @@
     }
 
     .sheet.desktop .body {
-      padding: 0 24px 24px;
+      padding: 0 24px calc(24px + env(safe-area-inset-bottom));
     }
   }
 </style>

@@ -113,7 +113,7 @@
     onclick={onToggleMute}
     onpointerdown={stop}
   >
-    <span class="dot"></span>
+    <span class="ring"><span class="dot"></span></span>
   </button>
 
   <div class="rail">
@@ -194,13 +194,21 @@
   .mute {
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    width: 44px;
+    height: 44px;
     padding: 0;
-    border: 1px solid var(--sand-dark);
-    border-radius: 50%;
+    border: 0;
     background: transparent;
     cursor: pointer;
+  }
+
+  .ring {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--sand-dark);
+    border-radius: 50%;
   }
 
   .mute .dot {
@@ -211,7 +219,7 @@
     opacity: 0.45;
   }
 
-  .mute.on {
+  .mute.on .ring {
     border-color: var(--forest);
     background: var(--forest);
   }
@@ -265,15 +273,20 @@
   }
 
   .timbre {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
     max-width: 100%;
-    padding: 2px 5px;
+    padding: 4px 6px;
     border: 0;
-    border-radius: 4px;
+    border-radius: 6px;
     background: transparent;
     font-family: var(--font-mono);
     font-size: 9px;
     letter-spacing: 0.04em;
-    color: var(--sage-dark);
+    color: var(--forest-muted);
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;

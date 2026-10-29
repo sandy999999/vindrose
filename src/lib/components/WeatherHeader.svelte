@@ -102,7 +102,7 @@
   }
 
   .stale {
-    color: var(--sage-dark);
+    color: var(--forest);
   }
 
   .weather {

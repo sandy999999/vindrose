@@ -138,7 +138,7 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-height: 36px;
+    min-height: 44px;
     padding: 0 12px;
     border: 1px solid var(--sand-dark);
     border-radius: 999px;

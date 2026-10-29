@@ -129,10 +129,11 @@
     if (!ready || !map || !place || place === flownTo) return
     flownTo = place
     pendingPin = null
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     map.flyTo({
       center: [place.lon, place.lat],
       zoom: Math.max(map.getZoom(), 10),
-      duration: 900,
+      duration: reduceMotion ? 0 : 900,
     })
   })
 

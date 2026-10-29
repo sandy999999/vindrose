@@ -43,6 +43,39 @@
   })
   const allMuted = $derived(CHANNELS.every((id) => view.channelMuted[id]))
 
+  let wakeLock: WakeLockSentinel | null = null
+
+  async function acquireWakeLock(): Promise<void> {
+    if (wakeLock || !('wakeLock' in navigator) || document.hidden) return
+    try {
+      const lock = await navigator.wakeLock.request('screen')
+      wakeLock = lock
+      lock.addEventListener('release', () => {
+        if (wakeLock === lock) wakeLock = null
+      })
+    } catch {
+      wakeLock = null
+    }
+  }
+
+  async function releaseWakeLock(): Promise<void> {
+    const lock = wakeLock
+    wakeLock = null
+    try {
+      await lock?.release()
+    } catch {
+      // Already released by the browser.
+    }
+  }
+
+  $effect(() => {
+    if (view.playing) {
+      void acquireWakeLock()
+    } else {
+      void releaseWakeLock()
+    }
+  })
+
   onMount(() => {
     const unsubscribe = session.subscribe((next) => {
       view = next
@@ -51,7 +84,15 @@
     if (saved) {
       void session.selectPlace(saved)
     }
-    return unsubscribe
+    const onVisibility = (): void => {
+      if (!document.hidden && session.snapshot.playing) void acquireWakeLock()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      unsubscribe()
+      document.removeEventListener('visibilitychange', onVisibility)
+      void releaseWakeLock()
+    }
   })
 
   $effect(() => {

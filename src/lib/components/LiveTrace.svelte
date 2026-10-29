@@ -179,7 +179,11 @@
   }
 
   .legend span.wind {
-    color: var(--sage-dark);
+    color: var(--forest-muted);
+  }
+
+  .legend span.wind::before {
+    background: var(--sage-dark);
   }
 
   .legend span.pressure {
