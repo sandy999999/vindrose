@@ -153,6 +153,13 @@ export function maskAt(plan: Plan, elapsedSec: number): LayerMask {
   return mask
 }
 
+export function sectionAt(plan: Plan, elapsedSec: number): Section {
+  for (const span of plan.sections) {
+    if (elapsedSec < span.endSec) return span.kind
+  }
+  return plan.sections[plan.sections.length - 1]?.kind ?? 'emerge'
+}
+
 export function bellAt(plan: Plan): number {
   const span = plan.sections.find((section) => section.kind === 'break')
   return span === undefined ? plan.lengthSec : span.endSec - 2

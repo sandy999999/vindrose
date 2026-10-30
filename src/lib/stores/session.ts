@@ -3,9 +3,20 @@ import { detectEvents, freshEventState, type EventState } from '../domain/events
 import type { ChannelTargets } from '../domain/mapping'
 import { mapWeather } from '../domain/mapping'
 import { placeProfile, type PlaceProfile } from '../domain/place'
+import {
+  bellAt,
+  maskAt,
+  nextSeed,
+  planFor,
+  sectionAt,
+  thunderSlots,
+  type LayerMask,
+  type Plan,
+  type Section,
+} from '../domain/director'
 import type { WeatherReading } from '../domain/types'
 import { clamp } from '../domain/units'
-import { CHANNELS, type ChannelId } from '../audio/engine'
+import { CHANNELS, TRANSITION_SECONDS, type ChannelId } from '../audio/engine'
 import { defaultTimbre, defaultTimbres, isTimbre, type TimbreName } from '../audio/timbres'
 import { latestOnly } from '../weather/latest'
 import type { WeatherSnapshot } from '../weather/openMeteo'
@@ -15,6 +26,11 @@ export const POLL_MS = 300_000
 export const RETUNE_TAU = 2.5
 export const AMBIENT_TAU = 20
 export const MAX_CHANNEL_GAIN = 1.5
+export const CHAINED_FADE_SECONDS = 20
+
+const FULL_MASK: LayerMask = {
+  wind: 1, rain: 1, gust: 1, pressure: 1, thunder: 1, pad: 1, motif: 1,
+}
 
 export interface Mix {
   gain: Record<ChannelId, number>
@@ -32,6 +48,9 @@ export interface EngineLike {
   setMutedAll(muted: boolean): void
   setFrozen(frozen: boolean): void
   setTimbre(channel: ChannelId, name: TimbreName): void
+  setProfile(profile: PlaceProfile, seconds?: number): void
+  setTempo(bpm: number): void
+  setBarHandler?(handler: (time: number, bar: number) => void): void
   fire(events: AudioEvent[]): void
 }
 
@@ -45,6 +64,7 @@ export interface RecorderLike {
 export interface SessionDeps {
   engine: EngineLike
   weather(lat: number, lon: number): Promise<WeatherSnapshot>
+  elevation?(lat: number, lon: number): Promise<number | null>
   createRecorder?(): Promise<RecorderLike>
   savePlace?(place: Place): void
   loadPlace?(): Place | null
@@ -67,6 +87,10 @@ export interface SessionState {
   channelGain: Record<ChannelId, number>
   channelMuted: Record<ChannelId, boolean>
   timbre: Partial<Record<ChannelId, TimbreName>>
+  section: Section | null
+  pieceSeed: number
+  plan: Plan | null
+  levels: Record<ChannelId, number>
 }
 
 function channelMap<T>(value: T): Record<ChannelId, T> {
@@ -99,9 +123,39 @@ function normalizeMix(mix: Mix | null): Mix {
   return { gain, muted, timbre }
 }
 
+function applyMask(targets: ChannelTargets, mask: LayerMask): ChannelTargets {
+  return {
+    ...targets,
+    wind: { ...targets.wind, level: targets.wind.level * mask.wind },
+    rain: { ...targets.rain, level: targets.rain.level * mask.rain },
+    gust: { ...targets.gust, level: targets.gust.level * mask.gust },
+    pressure: { ...targets.pressure, level: targets.pressure.level * mask.pressure },
+    thunder: { ...targets.thunder, level: targets.thunder.level * mask.thunder },
+    pad: { ...targets.pad, level: targets.pad.level * mask.pad },
+    motif: { ...targets.motif, level: targets.motif.level * mask.motif },
+  }
+}
+
+function levelsOf(targets: ChannelTargets): Record<ChannelId, number> {
+  return {
+    wind: targets.wind.level,
+    rain: targets.rain.level,
+    gust: targets.gust.level,
+    pressure: targets.pressure.level,
+    thunder: targets.thunder.level,
+    pad: targets.pad.level,
+    motif: targets.motif.level,
+  }
+}
+
+function elevationKey(place: Place): string {
+  return `${place.lat.toFixed(3)},${place.lon.toFixed(3)}`
+}
+
 export class Session {
   private readonly latest = latestOnly<WeatherSnapshot>()
   private readonly listeners = new Set<(state: SessionState) => void>()
+  private readonly elevationCache = new Map<string, number | null>()
   private state: SessionState
   private recorder: RecorderLike | null = null
   private recordingPlace: Place | null = null
@@ -109,6 +163,14 @@ export class Session {
   private requestId = 0
   private prevReading: WeatherReading | null = null
   private eventState: EventState = freshEventState()
+  private piece: Plan | null = null
+  private pieceIndex = 0
+  private baseSeed: number | null = null
+  private pieceStartMs = 0
+  private pausedElapsedMs = 0
+  private pendingProfile: PlaceProfile | null = null
+  private bellFired = false
+  private readonly thunderFired = new Set<number>()
 
   constructor(private readonly deps: SessionDeps) {
     const mix = normalizeMix(deps.loadMix?.() ?? null)
@@ -126,6 +188,10 @@ export class Session {
       channelGain: mix.gain,
       channelMuted: mix.muted,
       timbre: mix.timbre,
+      section: null,
+      pieceSeed: 0,
+      plan: null,
+      levels: channelMap(0),
     }
     for (const id of CHANNELS) {
       deps.engine.setMix(id, mix.gain[id], mix.muted[id])
@@ -134,10 +200,17 @@ export class Session {
         deps.engine.setTimbre(id, name)
       }
     }
+    deps.engine.setBarHandler?.(() => this.tick())
   }
 
   get snapshot(): SessionState {
     return this.state
+  }
+
+  get elapsedSec(): number {
+    if (this.piece === null) return 0
+    if (!this.state.playing) return this.pausedElapsedMs / 1000
+    return (this.now() - this.pieceStartMs) / 1000
   }
 
   subscribe(listener: (state: SessionState) => void): () => void {
@@ -149,25 +222,77 @@ export class Session {
   }
 
   async selectPlace(place: Place): Promise<void> {
+    const id = (this.requestId += 1)
     this.prevReading = null
     this.eventState = freshEventState()
-    this.set({ place, profile: placeProfile(place.lat, place.lon) })
+    this.pendingProfile = null
+
+    const profile = this.profileFor(place)
+    this.baseSeed = profile.seed
+    this.pieceIndex = 0
+    this.set({ place, profile })
     this.deps.savePlace?.(place)
     this.startPolling()
-    await this.refresh(RETUNE_TAU)
+
+    if (this.piece !== null) {
+      this.beginPiece(this.state.playing ? TRANSITION_SECONDS : 0)
+    } else {
+      this.deps.engine.setProfile(profile, 0)
+    }
+    this.requestElevation(place)
+
+    await this.refresh(RETUNE_TAU, id)
   }
 
   async play(): Promise<void> {
     if (this.state.playing) return
     this.set({ playing: true })
+    if (this.piece === null) {
+      this.beginPiece(0)
+    } else {
+      this.pieceStartMs = this.now() - this.pausedElapsedMs
+    }
     await this.deps.engine.resume()
     await this.deps.engine.start()
   }
 
   pause(): void {
     if (!this.state.playing) return
+    this.pausedElapsedMs = this.elapsedSec * 1000
     this.deps.engine.stop()
     this.set({ playing: false })
+  }
+
+  tick(tau: number = RETUNE_TAU): void {
+    const profile = this.state.profile
+    const reading = this.state.reading
+    if (profile === null || reading === null) return
+
+    const elapsed = this.elapsedSec
+    if (this.piece !== null && elapsed >= this.piece.lengthSec) {
+      this.beginPiece(CHAINED_FADE_SECONDS)
+      return
+    }
+
+    const mask = this.piece === null ? FULL_MASK : maskAt(this.piece, elapsed)
+    const targets = applyMask(mapWeather(reading, profile, elapsed), mask)
+    this.deps.engine.applyTargets(targets, tau)
+    this.set({ levels: levelsOf(targets) })
+
+    if (this.piece === null) return
+    const section = sectionAt(this.piece, elapsed)
+    if (section !== this.state.section) {
+      this.set({ section })
+    }
+    if (!this.bellFired && elapsed >= bellAt(this.piece)) {
+      this.bellFired = true
+      this.deps.engine.fire([{ type: 'bell' }])
+    }
+    for (const slot of thunderSlots(this.piece, reading)) {
+      if (elapsed < slot || this.thunderFired.has(slot)) continue
+      this.thunderFired.add(slot)
+      this.deps.engine.fire([{ type: 'thunder-crack', strength: 1 }])
+    }
   }
 
   async startRecording(): Promise<void> {
@@ -242,17 +367,76 @@ export class Session {
     this.listeners.clear()
   }
 
-  private async refresh(tau: number): Promise<void> {
+  private beginPiece(fadeSeconds: number): void {
+    const profile = this.pendingProfile ?? this.state.profile
+    if (profile === null) return
+    this.pendingProfile = null
+
+    this.pieceIndex += 1
+    this.baseSeed = this.baseSeed ?? profile.seed
+    const seed = nextSeed(this.baseSeed, this.pieceIndex)
+    const plan = planFor(seed, this.state.reading)
+    this.piece = plan
+    this.pieceStartMs = this.now()
+    this.pausedElapsedMs = 0
+    this.bellFired = false
+    this.thunderFired.clear()
+
+    this.deps.engine.setTempo(profile.tempo)
+    this.deps.engine.setProfile(profile, fadeSeconds)
+    this.set({
+      profile,
+      pieceSeed: seed,
+      plan,
+      section: sectionAt(plan, 0),
+    })
+    this.tick()
+  }
+
+  private profileFor(place: Place): PlaceProfile {
+    const cached = this.elevationCache.get(elevationKey(place))
+    return placeProfile(place.lat, place.lon, cached ?? null)
+  }
+
+  private requestElevation(place: Place): void {
+    const key = elevationKey(place)
+    if (this.elevationCache.has(key) || !this.deps.elevation) return
+    void this.deps
+      .elevation(place.lat, place.lon)
+      .then((value) => {
+        this.elevationCache.set(key, value)
+        if (this.state.place !== place) return
+        this.applyElevation(place, value)
+      })
+      .catch(() => undefined)
+  }
+
+  private applyElevation(place: Place, elevation: number | null): void {
+    const profile = placeProfile(place.lat, place.lon, elevation)
+    if (this.piece !== null) {
+      this.pendingProfile = profile
+      return
+    }
+    this.set({ profile })
+    this.deps.engine.setProfile(profile, 0)
+    this.tick()
+  }
+
+  private now(): number {
+    return this.deps.now?.() ?? Date.now()
+  }
+
+  private async refresh(tau: number, id?: number): Promise<void> {
     const place = this.state.place
     if (!place) return
 
-    const id = (this.requestId += 1)
+    const requestId = id ?? (this.requestId += 1)
     try {
       const snapshot = await this.latest(() => this.deps.weather(place.lat, place.lon))
-      if (snapshot === null || id !== this.requestId) return
+      if (snapshot === null || requestId !== this.requestId) return
       this.apply(snapshot, tau)
     } catch {
-      if (id !== this.requestId) return
+      if (requestId !== this.requestId) return
       this.set({ stale: true })
     }
   }
@@ -265,10 +449,7 @@ export class Session {
       stale: false,
     })
 
-    const profile = this.state.profile
-    if (profile) {
-      this.deps.engine.applyTargets(mapWeather(snapshot.reading, profile, 0), tau)
-    }
+    this.tick(tau)
 
     const events = detectEvents(
       previous,

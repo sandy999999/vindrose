@@ -4,6 +4,8 @@ import type { SessionDeps, EngineLike, Mix, RecorderLike } from '../src/lib/stor
 import { defaultTimbre } from '../src/lib/audio/timbres'
 import { CHANNELS, type ChannelId } from '../src/lib/audio/engine'
 import type { ChannelTargets } from '../src/lib/domain/mapping'
+import { bellAt } from '../src/lib/domain/director'
+import { placeProfile, type PlaceProfile } from '../src/lib/domain/place'
 import type { WeatherReading } from '../src/lib/domain/types'
 import type { Place } from '../src/lib/weather/photon'
 
@@ -34,6 +36,8 @@ class FakeEngine implements EngineLike {
   mutedAll: boolean[] = []
   frozen = false
   timbres: Array<{ id: string; name: string }> = []
+  profiles: PlaceProfile[] = []
+  tempos: number[] = []
 
   async start(): Promise<void> {
     this.started += 1
@@ -61,6 +65,12 @@ class FakeEngine implements EngineLike {
   }
   setTimbre(id: string, name: string): void {
     this.timbres.push({ id, name })
+  }
+  setProfile(profile: PlaceProfile, _seconds?: number): void {
+    this.profiles.push(profile)
+  }
+  setTempo(bpm: number): void {
+    this.tempos.push(bpm)
   }
   fire(events: unknown[]): void {
     this.events.push(...events)
@@ -344,6 +354,102 @@ describe('Session', () => {
     expect(session.snapshot.channelGain.motif).toBe(1)
     expect(session.snapshot.channelMuted.pad).toBe(false)
 
+    session.dispose()
+  })
+
+  it('freezes the piece clock while paused and continues the same plan', async () => {
+    let now = 0
+    const { deps } = makeDeps({ now: () => now })
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    const seed = session.snapshot.pieceSeed
+    now = 30_000
+    expect(session.elapsedSec).toBeCloseTo(30)
+    session.pause()
+    now = 3_600_000
+    expect(session.elapsedSec).toBeCloseTo(30)
+    await session.play()
+    expect(session.snapshot.pieceSeed).toBe(seed)
+    expect(session.elapsedSec).toBeCloseTo(30)
+    session.dispose()
+  })
+
+  it('applies the section mask and publishes post-mask levels', async () => {
+    let now = 0
+    const { deps } = makeDeps({ now: () => now })
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    now = 5_000
+    session.tick()
+    expect(session.snapshot.section).toBe('emerge')
+    expect(session.snapshot.levels.pad).toBeGreaterThan(0)
+    const expose = session.snapshot.plan!.sections.find((s) => s.kind === 'expose')!
+    now = expose.startSec * 1000 + 1000
+    session.tick()
+    expect(session.snapshot.section).toBe('expose')
+    expect(session.snapshot.levels.pad).toBe(0)
+    session.dispose()
+  })
+
+  it('starts a new piece and crossfades when the place changes', async () => {
+    const { deps, engine } = makeDeps()
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    const first = session.snapshot.pieceSeed
+    await session.selectPlace(otherPlace)
+    expect(session.snapshot.pieceSeed).not.toBe(first)
+    expect(engine.profiles.at(-1)?.mode).toBe(placeProfile(59.91, 10.75).mode)
+    session.dispose()
+  })
+
+  it('keeps a late elevation result for the next piece', async () => {
+    let now = 0
+    let resolveElevation: (value: number | null) => void = () => undefined
+    const { deps, engine } = makeDeps({
+      now: () => now,
+      elevation: () =>
+        new Promise((resolve) => {
+          resolveElevation = resolve
+        }),
+    })
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    const applied = engine.profiles.at(-1)
+    resolveElevation(1200)
+    await Promise.resolve()
+    expect(engine.profiles.at(-1)).toBe(applied)
+    now = (session.snapshot.plan!.lengthSec + 1) * 1000
+    session.tick()
+    expect(session.snapshot.profile?.material).toBe('stone')
+    expect(engine.profiles.at(-1)?.material).toBe('stone')
+    session.dispose()
+  })
+
+  it('keeps only the last of two quick place changes', async () => {
+    const { deps, engine } = makeDeps()
+    const session = new Session(deps)
+    await Promise.all([session.selectPlace(place), session.selectPlace(otherPlace)])
+    expect(session.snapshot.place).toEqual(otherPlace)
+    expect(engine.profiles.at(-1)?.seed).toBe(placeProfile(59.91, 10.75).seed)
+    session.dispose()
+  })
+
+  it('fires the bell once at the end of break and thunder only on code 95 and above', async () => {
+    let now = 0
+    const { deps, engine } = makeDeps({ now: () => now })
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    const bell = bellAt(session.snapshot.plan!)
+    now = (bell + 0.5) * 1000
+    session.tick()
+    expect(engine.events.some((e) => (e as { type: string }).type === 'bell')).toBe(true)
+    session.tick()
+    expect(engine.events.filter((e) => (e as { type: string }).type === 'bell')).toHaveLength(1)
     session.dispose()
   })
 })

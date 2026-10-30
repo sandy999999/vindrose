@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  bellAt, layerMask, maskAt, nextSeed, planFor, pieceLength, soloVoice, stormScore, thunderSlots,
+  bellAt, layerMask, maskAt, nextSeed, planFor, pieceLength, sectionAt, soloVoice, stormScore, thunderSlots,
 } from '../src/lib/domain/director'
 import { fnv1a } from '../src/lib/domain/random'
 import type { WeatherReading } from '../src/lib/domain/types'
@@ -139,5 +139,15 @@ describe('masks and rare events', () => {
   it('chains the next seed deterministically from the first', () => {
     expect(nextSeed(42, 1)).toBe(fnv1a('42:1'))
     expect(nextSeed(42, 2)).toBe(fnv1a('42:2'))
+  })
+})
+
+describe('sectionAt', () => {
+  it('names the section containing a moment', () => {
+    const plan = planFor(30, storm)
+    const expose = plan.sections.find((span) => span.kind === 'expose')!
+    expect(sectionAt(plan, 0)).toBe('emerge')
+    expect(sectionAt(plan, expose.startSec + 1)).toBe('expose')
+    expect(sectionAt(plan, plan.lengthSec)).toBe('return')
   })
 })
