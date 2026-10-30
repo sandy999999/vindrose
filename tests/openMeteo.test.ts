@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fetchWeather, WeatherError } from '../src/lib/weather/openMeteo'
+import { fetchElevation, fetchWeather, WeatherError } from '../src/lib/weather/openMeteo'
 
 const payload = {
   current: {
@@ -74,5 +74,25 @@ describe('fetchWeather', () => {
   it('refuses unreadable json', async () => {
     const broken = async (): Promise<Response> => new Response('<html>', { status: 200 })
     await expect(fetchWeather(0, 0, broken)).rejects.toMatchObject({ code: 'parse' })
+  })
+})
+
+describe('fetchElevation', () => {
+  it('reads the first elevation from the keyless endpoint', async () => {
+    let called = ''
+    const fetchImpl = (async (url: URL | RequestInfo) => {
+      called = String(url)
+      return new Response(JSON.stringify({ elevation: [12.4] }), { status: 200 })
+    }) as typeof fetch
+    await expect(fetchElevation(58.11, 11.32, fetchImpl)).resolves.toBe(12.4)
+    expect(called).toContain('/v1/elevation')
+    expect(called).toContain('latitude=58.11')
+  })
+
+  it('returns null on a bad response instead of throwing', async () => {
+    const fetchImpl = (async () => new Response('nope', { status: 500 })) as typeof fetch
+    await expect(fetchElevation(1, 2, fetchImpl)).resolves.toBeNull()
+    const broken = (async () => { throw new Error('offline') }) as typeof fetch
+    await expect(fetchElevation(1, 2, broken)).resolves.toBeNull()
   })
 })
