@@ -85,14 +85,27 @@ describe('AudioEngine channels', () => {
 
 const sampleTargets: ChannelTargets = {
   wind: { level: 0, freq: 100, q: 8, pan: 0, breath: 1 },
-  rain: { level: 0, density: 0, basePitch: 220 },
+  rain: { level: 0, density: 0, rate: 0, basePitch: 220 },
   gust: { level: 0 },
   pressure: { level: 0.35, targetHz: 55 },
   thunder: { level: 0 },
   pad: { level: 0, cutoff: 300, degree: 0 },
   motif: { level: 0, register: 50 },
+  air: { shelfDb: 0 },
   reverb: { wet: 0.15, preDelay: 0.01 },
 }
+
+describe('AudioEngine air', () => {
+  it('damps every weather voice with one shared high shelf', () => {
+    const fake = new FakeAudioContext()
+    const engine = new AudioEngine(asCtx(fake))
+    engine.applyTargets({ ...sampleTargets, air: { shelfDb: -4 } }, 0)
+    const shelf = fake.created.biquads.find((filter) => filter.type === 'highshelf')
+    expect(shelf).toBeDefined()
+    expect(shelf!.gain.value).toBeCloseTo(-4)
+    expect(fake.created.biquads[0]).toBe(shelf)
+  })
+})
 
 describe('AudioEngine place transition', () => {
   it('crossfades to a new voice set over four seconds', () => {
