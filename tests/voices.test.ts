@@ -112,6 +112,23 @@ describe('ThunderChannel', () => {
     expect(freqs.some((f) => f > 1000)).toBe(true)
     expect(fake.created.sources.length).toBeGreaterThanOrEqual(2)
   })
+
+  it('rolls the rumble through two ground reflections', () => {
+    const fake = new FakeAudioContext()
+    const channel = new ThunderChannel(asCtx(fake))
+    channel.fire({ type: 'thunder-crack', strength: 0.6 })
+    expect(fake.created.delays.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shadows a distant strike more than a close one', () => {
+    const near = new FakeAudioContext()
+    new ThunderChannel(asCtx(near)).fire({ type: 'thunder-crack', strength: 1 })
+    const far = new FakeAudioContext()
+    new ThunderChannel(asCtx(far)).fire({ type: 'thunder-crack', strength: 0.1 })
+    const nearTop = near.created.biquads[0]!.frequency.value
+    const farTop = far.created.biquads[0]!.frequency.value
+    expect(farTop).toBeLessThan(nearTop)
+  })
 })
 
 describe('PadChannel', () => {
