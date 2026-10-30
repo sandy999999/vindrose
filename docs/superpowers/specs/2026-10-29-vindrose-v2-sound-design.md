@@ -33,7 +33,9 @@ The shape, decided in conversation:
 - Rain, wind, gusts, pressure and thunder are recognisable as those things,
   not as textures that happen to be mapped to numbers.
 - The six-parameter mixer survives, extended by one channel.
-- Recording, timbre pickers, mute, master and offline behaviour keep working.
+- Recording, mute, master and offline behaviour keep working. Pad and motif
+  keep their three-timbre pickers; the weather strips do not have one,
+  because each is a single physical model.
 
 ## Non-goals
 
@@ -231,6 +233,10 @@ function stormScore(reading: WeatherReading | null): number // 0 to 1
   seed is FNV-1a of `${previousSeed}:${pieceIndex}`, so a session is
   reproducible from the seed in the file name. A recording can capture
   several pieces; the name carries the first one's seed.
+- **Place change.** Choosing a place while a piece runs ends that piece and
+  begins a new one, crossfaded over 4 s. Key, tempo and material change with
+  the place; the running piece never mutates underneath the listener. The
+  recording keeps the place it started with in its file name.
 
 The director is visible: the header shows the current section in micro
 caps. The listener should be able to tell that a piece is moving.
@@ -243,7 +249,10 @@ tight; if it does not, thunder folds into gust and the strip count stays
 six.
 
 Everything else in the shell stands: bottom sheet, transport, timbre hold
-menu, live trace, wake lock, freeze (now also stopping thunder).
+menu, live trace, wake lock, freeze (now also stopping thunder). The timbre
+hold menu opens on pad and motif only; the five weather strips are fader,
+mute and meter. The persisted mix drops timbre names for the weather
+channels and keeps them for pad and motif.
 
 ## Recording
 
@@ -262,8 +271,9 @@ place, the time and the piece seed it started under.
   pipe's scale snap, event routing, and the existing recorder and session
   suites.
 - Browser: a recorded WAV per material, checking the resonant peaks sit at
-  the material's ratios; section transitions free of clicks; the level
-  invariant that no section exceeds the master ceiling.
+  the material's ratios; section transitions free of clicks; a place change
+  crossfaded over 4 s with no click; the level invariant that no section
+  exceeds the master ceiling.
 - Ear: the manual checklist gains "a piece has an arc" and "materials are
   distinguishable by ear".
 
@@ -292,6 +302,10 @@ API does.
 - The section mask multiplies, so a fader cannot undo the composition.
 - The motif's rhythm cell repeats A, A, B, A rather than varying per phrase.
 - The pressure pipe snaps to the mode, so it cannot beat against the pad.
+- A place change starts a new piece over a 4 s crossfade; the running piece
+  never mutates.
+- Only pad and motif keep timbre pickers. The weather strips are single
+  models.
 - The seed appears in the file name but has no UI yet.
 
 ## Left to the builder
