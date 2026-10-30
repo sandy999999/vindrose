@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { WindChannel } from '../src/lib/audio/channels/wind'
 import { RainChannel } from '../src/lib/audio/channels/rain'
+import { PressureChannel } from '../src/lib/audio/channels/pressure'
 import { FakeAudioContext, asCtx } from './fakeAudio'
 
 describe('WindChannel', () => {
@@ -26,5 +27,15 @@ describe('RainChannel', () => {
     const freqs = fake.created.biquads.map((f) => f.frequency.value)
     expect(freqs.slice(0, 4)).toEqual([1000, 2760, 5400, 8930])
     expect(fake.created.biquads.slice(0, 4).every((f) => f.Q.value === 40)).toBe(true)
+  })
+})
+
+describe('PressureChannel', () => {
+  it('tunes the pressure loop to the target frequency', () => {
+    const fake = new FakeAudioContext()
+    const channel = new PressureChannel(asCtx(fake))
+    channel.update({ level: 0.35, targetHz: 80 }, 0)
+    expect(fake.created.delays[0]!.delayTime.value).toBeCloseTo(1 / 80)
+    expect(fake.created.gains[0]!.gain.value).toBeCloseTo(0.93)
   })
 })
