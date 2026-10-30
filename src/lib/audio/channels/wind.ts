@@ -74,7 +74,9 @@ export class WindChannel implements InstrumentChannel {
     this.bed.connect(this.bedGain)
     this.bandGain.connect(this.panner)
     this.harmonicGain.connect(this.panner)
-    this.bedGain.connect(this.panner)
+    // Breath is the diffuse roar of the air itself: low frequency, bending
+    // around the head, so it stays centred while the resonances take the pan.
+    this.bedGain.connect(this.output)
     this.panner.connect(this.output)
     this.source.start()
   }

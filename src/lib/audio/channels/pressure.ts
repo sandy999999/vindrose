@@ -31,7 +31,7 @@ export class PressureChannel implements InstrumentChannel {
     this.feedback.gain.value = FEEDBACK
 
     this.output = ctx.createGain()
-    this.output.gain.value = 0
+    this.output.gain.value = 1
 
     this.levelGain = ctx.createGain()
     this.levelGain.gain.value = 0

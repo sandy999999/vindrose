@@ -22,6 +22,16 @@ describe('WindChannel', () => {
     expect(bed!.type).toBe('lowpass')
     expect(fake.created.panners[0]!.pan.value).toBeCloseTo(0.3)
   })
+
+  it('keeps the breath bed out of the direction pan', () => {
+    const fake = new FakeAudioContext()
+    const channel = new WindChannel(asCtx(fake))
+    channel.update({ level: 0.6, freq: 500, q: 20, pan: -0.7, breath: 0.4 }, 0)
+    const panner = fake.created.panners[0]!
+    const bed = fake.created.gains.find((gain) => gain.gain.value === 0.3)!
+    expect(bed.connections).not.toContain(panner)
+    expect(bed.connections).toContain(channel.output)
+  })
 })
 
 describe('RainChannel', () => {
@@ -53,6 +63,14 @@ describe('PressureChannel', () => {
     channel.update({ level: 0.35, targetHz: 80 }, 0)
     expect(fake.created.delays[0]!.delayTime.value).toBeCloseTo(1 / 80)
     expect(fake.created.gains[0]!.gain.value).toBeCloseTo(0.93)
+  })
+
+  it('opens its output so the pipe can sound', () => {
+    const fake = new FakeAudioContext()
+    const channel = new PressureChannel(asCtx(fake))
+    channel.update({ level: 0.35, targetHz: 80 }, 0)
+    expect(channel.output.gain.value).toBe(1)
+    expect(fake.created.gains[2]!.gain.value).toBeCloseTo(0.35)
   })
 })
 
