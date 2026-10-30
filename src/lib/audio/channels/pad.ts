@@ -1,11 +1,12 @@
-import { DORIAN, midiToHz } from '../../domain/harmony'
+import { midiToHz, scaleNote } from '../../domain/harmony'
+import type { Mode, PlaceProfile } from '../../domain/place'
 import type { InstrumentChannel } from '../engine'
 import type { TimbreName } from '../timbres'
 
-interface HumidityTarget {
+interface PadTarget {
   level: number
   cutoff: number
-  root: number
+  degree: number
 }
 
 interface Profile {
@@ -24,17 +25,18 @@ const GLASS: Profile = { type: 'sine', detunes: [-40, 0, 40], octave: 12, q: 6, 
 const PROFILES: Record<string, Profile> = { pad: PAD, choir: CHOIR, glass: GLASS }
 
 const VOICE_DEGREES = [0, 2, 4]
-const BARS_PER_PHRASE = 8
+const PAD_OCTAVE = 1
+const DEFAULT_MODE: Mode = 'dorian'
 
-export class HumidityChannel implements InstrumentChannel {
+export class PadChannel implements InstrumentChannel {
   readonly output: GainNode
 
   private readonly filter: BiquadFilterNode
   private readonly gain: GainNode
   private readonly voices: OscillatorNode[]
   private readonly profile: Profile
-  private root = 38
-  private chordIndex = 0
+  private mode: Mode = DEFAULT_MODE
+  private degree = 0
 
   constructor(
     private readonly ctx: AudioContext,
@@ -64,27 +66,25 @@ export class HumidityChannel implements InstrumentChannel {
     this.applyChord(6)
   }
 
-  update(target: unknown, tau: number): void {
-    const humidity = target as HumidityTarget
-    const now = this.ctx.currentTime
-    this.root = humidity.root
-    this.gain.gain.setTargetAtTime(humidity.level * this.profile.level, now, Math.min(tau, 2))
-    this.filter.frequency.setTargetAtTime(humidity.cutoff * this.profile.cutoffScale, now, tau)
-    this.applyChord(Math.min(tau, 3))
+  setProfile(profile: PlaceProfile): void {
+    this.mode = profile.mode
+    this.applyChord(2)
   }
 
-  onBar(_time: number, bar: number): void {
-    if (bar % BARS_PER_PHRASE !== 0) return
-    this.chordIndex = (this.chordIndex + 1) % DORIAN.length
-    this.applyChord(6)
+  update(target: unknown, tau: number): void {
+    const pad = target as PadTarget
+    const now = this.ctx.currentTime
+    this.gain.gain.setTargetAtTime(pad.level * this.profile.level, now, Math.min(tau, 2))
+    this.filter.frequency.setTargetAtTime(pad.cutoff * this.profile.cutoffScale, now, tau)
+    this.degree = pad.degree
+    this.applyChord(Math.min(tau, 3))
   }
 
   private applyChord(tau: number): void {
     const now = this.ctx.currentTime
     for (let i = 0; i < this.voices.length; i += 1) {
-      const degree = VOICE_DEGREES[i] ?? 0
-      const offset = DORIAN[(this.chordIndex + degree) % DORIAN.length] ?? 0
-      const note = this.root + 12 + offset + this.profile.octave
+      const offset = VOICE_DEGREES[i] ?? 0
+      const note = scaleNote(this.mode, this.degree + offset, PAD_OCTAVE) + this.profile.octave
       this.voices[i]?.frequency.setTargetAtTime(midiToHz(note), now, tau)
     }
   }

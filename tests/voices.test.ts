@@ -3,6 +3,9 @@ import { WindChannel } from '../src/lib/audio/channels/wind'
 import { RainChannel } from '../src/lib/audio/channels/rain'
 import { PressureChannel } from '../src/lib/audio/channels/pressure'
 import { ThunderChannel } from '../src/lib/audio/channels/thunder'
+import { PadChannel } from '../src/lib/audio/channels/pad'
+import { MotifChannel } from '../src/lib/audio/channels/motif'
+import { placeProfile } from '../src/lib/domain/place'
 import { FakeAudioContext, asCtx } from './fakeAudio'
 
 describe('WindChannel', () => {
@@ -50,5 +53,32 @@ describe('ThunderChannel', () => {
     expect(freqs.some((f) => f >= 60 && f <= 180)).toBe(true)
     expect(freqs.some((f) => f > 1000)).toBe(true)
     expect(fake.created.sources.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('PadChannel', () => {
+  it('moves the pad through the chord cycle', () => {
+    const fake = new FakeAudioContext()
+    const pad = new PadChannel(asCtx(fake), 'pad')
+    pad.setProfile(placeProfile(58, 11))
+    pad.update({ level: 0.5, cutoff: 900, degree: 0 }, 0)
+    const degree0 = fake.created.oscs.map((o) => o.frequency.value)
+    pad.update({ level: 0.5, cutoff: 900, degree: 2 }, 0)
+    const degree2 = fake.created.oscs.map((o) => o.frequency.value)
+    expect(degree0).toHaveLength(3)
+    expect(degree2).not.toEqual(degree0)
+  })
+})
+
+describe('MotifChannel', () => {
+  it('schedules a phrase of two to five notes on the bar grid', () => {
+    const fake = new FakeAudioContext()
+    const motif = new MotifChannel(asCtx(fake))
+    motif.setProfile(placeProfile(58, 11))
+    motif.onBar(10, 0)
+    const notes = fake.created.oscs
+    expect(notes.length).toBeGreaterThanOrEqual(2)
+    expect(notes.length).toBeLessThanOrEqual(5)
+    expect(notes[0]?.startedAt).toBe(10)
   })
 })

@@ -1,4 +1,5 @@
 import type { AudioEvent } from '../../domain/events'
+import type { PlaceProfile } from '../../domain/place'
 import type { InstrumentChannel } from '../engine'
 import type { TimbreName } from '../timbres'
 
@@ -24,6 +25,7 @@ export class TimbreChannel implements InstrumentChannel {
   private readonly fading = new Set<Slot>()
   private lastTarget: unknown = null
   private lastTau = 20
+  private lastProfile: PlaceProfile | null = null
   private disposed = false
 
   constructor(
@@ -61,6 +63,14 @@ export class TimbreChannel implements InstrumentChannel {
     }, FADE_MS + 50)
   }
 
+  setProfile(profile: PlaceProfile): void {
+    this.lastProfile = profile
+    this.current.channel.setProfile?.(profile)
+    for (const slot of this.fading) {
+      slot.channel.setProfile?.(profile)
+    }
+  }
+
   update(target: unknown, tau: number): void {
     this.lastTarget = target
     this.lastTau = tau
@@ -96,6 +106,9 @@ export class TimbreChannel implements InstrumentChannel {
     gain.gain.value = gainValue
     channel.output.connect(gain)
     gain.connect(this.output)
+    if (this.lastProfile !== null) {
+      channel.setProfile?.(this.lastProfile)
+    }
     if (this.lastTarget !== null) {
       channel.update(this.lastTarget, this.lastTau)
     }

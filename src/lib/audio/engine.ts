@@ -6,8 +6,8 @@ import { WindChannel } from './channels/wind'
 import { GustChannel } from './channels/gust'
 import { RainChannel } from './channels/rain'
 import { PressureChannel } from './channels/pressure'
-import { HumidityChannel } from './channels/humidity'
-import { TemperatureChannel } from './channels/temperature'
+import { PadChannel } from './channels/pad'
+import { MotifChannel } from './channels/motif'
 import { ThunderChannel } from './channels/thunder'
 import { TimbreChannel } from './channels/timbre'
 import { defaultTimbre, type TimbreName } from './timbres'
@@ -250,9 +250,8 @@ export class AudioEngine {
     channels.get('gust')?.update(targets.gust, tau)
     channels.get('pressure')?.update(targets.pressure, tau)
     channels.get('thunder')?.update(targets.thunder, tau)
-    // The v1 pad and motif voices still read a root and a partial count.
-    channels.get('pad')?.update({ ...targets.pad, root: 38 }, tau)
-    channels.get('motif')?.update({ ...targets.motif, root: 38, partials: 4 }, tau)
+    channels.get('pad')?.update(targets.pad, tau)
+    channels.get('motif')?.update(targets.motif, tau)
     this.reverb?.setWet(targets.reverb.wet, targets.reverb.preDelay)
   }
 
@@ -368,9 +367,9 @@ export class AudioEngine {
       case 'thunder':
         return new ThunderChannel(this.ctx)
       case 'pad':
-        return new HumidityChannel(this.ctx, name)
+        return new PadChannel(this.ctx, name)
       case 'motif':
-        return new TemperatureChannel(this.ctx, name)
+        return new MotifChannel(this.ctx, name)
     }
   }
 }
