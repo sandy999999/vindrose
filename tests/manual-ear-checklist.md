@@ -12,11 +12,32 @@ Setup: `npm run dev`, open the printed URL, pick a place, press play.
       exposed coastal station (for example Käringön or Stavanger) on a windy
       day. The two must be clearly different in density, brightness and
       movement, not just louder.
-- [ ] **Ten minutes without input.** Start playback, leave the tab alone for
-      ten minutes. The bed keeps evolving: humidity moves between chords, the
-      temperature partials breathe on phrase boundaries, pressure glides when
-      the tendency crosses a threshold. Nothing freezes and nothing drifts
-      into silence or runaway loudness.
+- [ ] **A piece has an arc.** Start playback and leave the tab alone. The
+      sections must be audible without reading the header: the bed enters,
+      builds, one weather voice plays exposed alone with the pad out, a near
+      silence breaks it, then the pad returns. A piece that sounds the same
+      at minute two and minute eight is a fail.
+- [ ] **Materials are distinguishable by ear.** On a rainy day, listen to one
+      place, then pick a place on another material (lowland wood against
+      highland stone, or water against glass). The same rain must land
+      differently: the pitch of the impacts and their decay change, not just
+      the volume.
+- [ ] **The expose solo is the strongest weather voice.** In the expose
+      section exactly one weather voice plays at full level and the pad is
+      silent. It must be the voice the weather is strongest in (gust on a
+      windy day, rain on a wet one). An exposed voice that is quiet, or a pad
+      that keeps running, is a fail.
+- [ ] **The bell marks the return.** Just before the pad returns after the
+      break, a single bell rings. It must be clearly a bell, exactly once,
+      and land before the pad rather than under it.
+- [ ] **A place change is heard as a new piece.** Pick a second place while
+      playing. Over about four seconds the sound crossfades into a new piece
+      with a new tempo, mode and material. A retune of the same piece, where
+      the phrasing and chord cycle stay put, is a fail.
+- [ ] **The seven strips fit on a 390 px phone.** In a mobile viewport, open
+      the sheet and confirm wind, rain, gust, pressure, thunder, pad and
+      motif each get a fader, a meter and a label with nothing clipped. Only
+      pad and motif show a timbre label.
 - [ ] **No pitch jumps on a reading update.** Watch the pressure, humidity and
       temperature channels when the five-minute poll lands. Tonal channels
       glide; one semitone steps are allowed, a leap or a click is a fail.
@@ -24,10 +45,10 @@ Setup: `npm run dev`, open the printed URL, pick a place, press play.
       pausing, switching place (the 2.5 s retune), starting a recording, and
       stopping one. Any click, pop or gap is a fail. A timbre switch must fade
       over about half a second with no volume hole.
-- [ ] **Timbre choices are different but related.** Cycle every channel
-      through its three timbres while playing. Each must be recognisably
-      itself (wind stays wind, rain stays rain) and none may be harsh at the
-      default fader position.
+- [ ] **Timbre choices are different but related.** Cycle pad and motif
+      through their three timbres while playing. Each must be recognisably
+      itself and none may be harsh at the default fader position. The five
+      weather strips must show no timbre label.
 - [ ] **Threshold events are audible.** Wait for a weather update that
       changes the integer temperature (one shimmer note), the wind sector
       (a short sweep across the stereo field) or the rain state (a burst of
