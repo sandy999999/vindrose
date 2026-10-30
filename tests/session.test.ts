@@ -124,6 +124,18 @@ describe('Session', () => {
     session.dispose()
   })
 
+  it('derives the place profile when a place is chosen', async () => {
+    const { deps } = makeDeps()
+    const session = new Session(deps)
+
+    await session.selectPlace(place)
+    expect(session.snapshot.profile?.mode).toBe('aeolian')
+    expect(session.snapshot.profile?.tempo).toBeGreaterThanOrEqual(48)
+    expect(session.snapshot.profile?.tempo).toBeLessThanOrEqual(64)
+
+    session.dispose()
+  })
+
   it('applies targets and fires events after a reading', async () => {
     const { deps, engine } = makeDeps()
     const session = new Session(deps)

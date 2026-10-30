@@ -2,6 +2,7 @@ import type { AudioEvent } from '../domain/events'
 import { detectEvents, freshEventState, type EventState } from '../domain/events'
 import type { ChannelTargets } from '../domain/mapping'
 import { mapWeather } from '../domain/mapping'
+import { placeProfile, type PlaceProfile } from '../domain/place'
 import type { WeatherReading } from '../domain/types'
 import { clamp } from '../domain/units'
 import { CHANNELS, type ChannelId } from '../audio/engine'
@@ -54,6 +55,7 @@ export interface SessionDeps {
 
 export interface SessionState {
   place: Place | null
+  profile: PlaceProfile | null
   reading: WeatherReading | null
   tendency: number
   playing: boolean
@@ -112,6 +114,7 @@ export class Session {
     const mix = normalizeMix(deps.loadMix?.() ?? null)
     this.state = {
       place: deps.loadPlace?.() ?? null,
+      profile: null,
       reading: null,
       tendency: 0,
       playing: false,
@@ -148,7 +151,7 @@ export class Session {
   async selectPlace(place: Place): Promise<void> {
     this.prevReading = null
     this.eventState = freshEventState()
-    this.set({ place })
+    this.set({ place, profile: placeProfile(place.lat, place.lon) })
     this.deps.savePlace?.(place)
     this.startPolling()
     await this.refresh(RETUNE_TAU)
@@ -262,10 +265,10 @@ export class Session {
       stale: false,
     })
 
-    this.deps.engine.applyTargets(
-      mapWeather(snapshot.reading, snapshot.pressureTendency),
-      tau,
-    )
+    const profile = this.state.profile
+    if (profile) {
+      this.deps.engine.applyTargets(mapWeather(snapshot.reading, profile, 0), tau)
+    }
 
     const events = detectEvents(
       previous,

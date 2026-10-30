@@ -214,11 +214,13 @@ export class AudioEngine {
 
   applyTargets(targets: ChannelTargets, tau = 20): void {
     this.channels.get('wind')?.update(targets.wind, tau)
-    this.channels.get('gust')?.update(targets.gust, tau)
     this.channels.get('rain')?.update(targets.rain, tau)
+    this.channels.get('gust')?.update(targets.gust, tau)
     this.channels.get('pressure')?.update(targets.pressure, tau)
-    this.channels.get('pad')?.update(targets.humidity, tau)
-    this.channels.get('motif')?.update(targets.temperature, tau)
+    this.channels.get('thunder')?.update(targets.thunder, tau)
+    // The v1 pad and motif voices still read a root and a partial count.
+    this.channels.get('pad')?.update({ ...targets.pad, root: 38 }, tau)
+    this.channels.get('motif')?.update({ ...targets.motif, root: 38, partials: 4 }, tau)
     this.reverb?.setWet(targets.reverb.wet, targets.reverb.preDelay)
   }
 

@@ -34,15 +34,17 @@
     { id: 'motif', label: 'MOT' },
   ]
 
-  const targets = $derived(view.reading ? mapWeather(view.reading, view.tendency) : null)
+  const targets = $derived(
+    view.reading && view.profile ? mapWeather(view.reading, view.profile, 0) : null,
+  )
   const levels: Record<ChannelId, number> = $derived({
     wind: targets?.wind.level ?? 0,
     rain: targets?.rain.level ?? 0,
     gust: targets?.gust.level ?? 0,
     pressure: targets?.pressure.level ?? 0,
-    thunder: 0,
-    pad: targets?.humidity.level ?? 0,
-    motif: targets?.temperature.level ?? 0,
+    thunder: targets?.thunder.level ?? 0,
+    pad: targets?.pad.level ?? 0,
+    motif: targets?.motif.level ?? 0,
   })
   const allMuted = $derived(view.mutedAll)
   const reverse = latestResult<Place | null>()
