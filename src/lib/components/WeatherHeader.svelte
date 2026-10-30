@@ -39,7 +39,7 @@
 
   const condition = $derived(reading ? conditionOf(reading.weatherCode) : 'no reading yet')
   const temperature = $derived(reading ? `${reading.temperature.toFixed(1)}°` : '--')
-  const wind = $derived(reading ? reading.windSpeed.toFixed(1) : '--')
+  const wind = $derived(reading ? (reading.windSpeed * 3.6).toFixed(1) : '--')
   const updated = $derived(reading ? timeOf(reading.time) : '')
 </script>
 

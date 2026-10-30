@@ -47,7 +47,7 @@
           {
             label: 'precip',
             full: 'precipitation',
-            value: `${reading.precipitation.toFixed(1)} mm`,
+            value: `${reading.precipitation.toFixed(1)} mm/h`,
           },
           {
             label: 'direction',

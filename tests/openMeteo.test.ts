@@ -4,6 +4,7 @@ import { fetchElevation, fetchWeather, WeatherError } from '../src/lib/weather/o
 const payload = {
   current: {
     time: '2026-10-29T12:00',
+    interval: 900,
     temperature_2m: 7.1,
     relative_humidity_2m: 87,
     precipitation: 2.4,
@@ -44,10 +45,29 @@ describe('fetchWeather', () => {
       temperature: 7.1,
       humidity: 87,
       pressure: 1008.6,
-      precipitation: 2.4,
+      precipitation: 9.6,
       cloudCover: 100,
       weatherCode: 61,
     })
+  })
+
+  it('asks for wind in metres per second', async () => {
+    let called = ''
+    const fetchImpl = (async (url: URL | RequestInfo) => {
+      called = String(url)
+      return jsonResponse(payload)
+    }) as typeof fetch
+    await fetchWeather(58.11, 11.32, fetchImpl)
+    expect(new URL(called).searchParams.get('wind_speed_unit')).toBe('ms')
+  })
+
+  it('converts the 15 minute precipitation interval to an hourly rate', async () => {
+    const hourly = {
+      ...payload,
+      current: { ...payload.current, interval: 3600, precipitation: 2.4 },
+    }
+    const result = await fetchWeather(58.11, 11.32, async () => jsonResponse(hourly))
+    expect(result.reading.precipitation).toBeCloseTo(2.4)
   })
 
   it('computes the three hour pressure tendency', async () => {
