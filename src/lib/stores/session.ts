@@ -159,6 +159,7 @@ export class Session {
   private state: SessionState
   private recorder: RecorderLike | null = null
   private recordingPlace: Place | null = null
+  private recordingSeed = 0
   private timer: ReturnType<typeof setInterval> | null = null
   private requestId = 0
   private prevReading: WeatherReading | null = null
@@ -300,6 +301,7 @@ export class Session {
     const recorder = await this.deps.createRecorder()
     this.recorder = recorder
     this.recordingPlace = this.state.place
+    this.recordingSeed = this.state.pieceSeed
     recorder.start()
     this.set({ recording: true })
   }
@@ -308,14 +310,17 @@ export class Session {
     blob: Blob
     durationSec: number
     place: Place | null
+    pieceSeed: number
   } | null {
     if (!this.recorder || !this.state.recording) return null
     const result = this.recorder.stop()
     const place = this.recordingPlace
+    const pieceSeed = this.recordingSeed
     this.recorder = null
     this.recordingPlace = null
+    this.recordingSeed = 0
     this.set({ recording: false })
-    return { ...result, place }
+    return { ...result, place, pieceSeed }
   }
 
   get recordingSeconds(): number {

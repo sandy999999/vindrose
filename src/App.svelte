@@ -12,6 +12,7 @@
   import type { ChannelId } from './lib/audio/engine'
   import { TIMBRES } from './lib/audio/timbres'
   import { recordAlert } from './lib/audio/recorder'
+  import { recordingName } from './lib/domain/recordingName'
   import { getSession } from './lib/stores/live'
   import { latestResult } from './lib/weather/latest'
   import type { SessionState } from './lib/stores/session'
@@ -147,22 +148,16 @@
       toast = 'Nothing was recorded'
       return
     }
-    download(result.blob, result.place)
+    download(result.blob, result.place, result.pieceSeed)
     const length = clock(result.durationSec)
     toast = limitReached ? `10 min limit reached · saved ${length}` : `Saved ${length}`
   }
 
-  function download(blob: Blob, place: Place | null): void {
-    const slug =
-      (place?.name ?? 'vindrose')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '') || 'vindrose'
-    const date = new Date().toISOString().slice(0, 10)
+  function download(blob: Blob, place: Place | null, seed: number): void {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `vindrose-${slug}-${date}.wav`
+    link.download = recordingName(place, new Date(), seed)
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }

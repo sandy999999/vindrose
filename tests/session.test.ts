@@ -452,4 +452,18 @@ describe('Session', () => {
     expect(engine.events.filter((e) => (e as { type: string }).type === 'bell')).toHaveLength(1)
     session.dispose()
   })
+
+  it('returns the piece seed that was active when the recording started', async () => {
+    const { deps } = makeDeps()
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    await session.startRecording()
+    const seed = session.snapshot.pieceSeed
+    await session.selectPlace(otherPlace)
+    const result = session.stopRecording()
+    expect(result?.pieceSeed).toBe(seed)
+    expect(session.snapshot.pieceSeed).not.toBe(seed)
+    session.dispose()
+  })
 })
