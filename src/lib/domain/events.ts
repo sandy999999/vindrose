@@ -10,6 +10,8 @@ export type AudioEvent =
   | { type: 'rain-change'; state: RainState }
   | { type: 'direction-sweep'; pan: number }
   | { type: 'temperature-note'; note: number }
+  | { type: 'thunder-crack'; strength: number }
+  | { type: 'bell' }
 
 export interface EventState {
   last: Record<string, number>

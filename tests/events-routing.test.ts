@@ -8,7 +8,7 @@ describe('eventTarget', () => {
     expect(eventTarget({ type: 'pressure-glide', direction: 'down' })).toBe('pressure')
     expect(eventTarget({ type: 'rain-change', state: 'rain' })).toBe('rain')
     expect(eventTarget({ type: 'direction-sweep', pan: 0.4 })).toBe('wind')
-    expect(eventTarget({ type: 'temperature-note', note: 64 })).toBe('temperature')
+    expect(eventTarget({ type: 'temperature-note', note: 64 })).toBe('motif')
   })
 })
 

@@ -18,7 +18,7 @@ export const MAX_CHANNEL_GAIN = 1.5
 export interface Mix {
   gain: Record<ChannelId, number>
   muted: Record<ChannelId, boolean>
-  timbre: Record<ChannelId, TimbreName>
+  timbre: Partial<Record<ChannelId, TimbreName>>
 }
 
 export interface EngineLike {
@@ -64,7 +64,7 @@ export interface SessionState {
   mutedAll: boolean
   channelGain: Record<ChannelId, number>
   channelMuted: Record<ChannelId, boolean>
-  timbre: Record<ChannelId, TimbreName>
+  timbre: Partial<Record<ChannelId, TimbreName>>
 }
 
 function channelMap<T>(value: T): Record<ChannelId, T> {
@@ -86,6 +86,8 @@ function normalizeMix(mix: Mix | null): Mix {
         gain[id] = clamp(value, 0, MAX_CHANNEL_GAIN)
       }
       muted[id] = mix.muted?.[id] === true
+    }
+    for (const id of Object.keys(timbre) as ChannelId[]) {
       const name = mix.timbre?.[id]
       if (typeof name === 'string' && isTimbre(id, name)) {
         timbre[id] = name
@@ -124,8 +126,9 @@ export class Session {
     }
     for (const id of CHANNELS) {
       deps.engine.setMix(id, mix.gain[id], mix.muted[id])
-      if (mix.timbre[id] !== defaultTimbre(id)) {
-        deps.engine.setTimbre(id, mix.timbre[id])
+      const name = mix.timbre[id]
+      if (name !== undefined && name !== defaultTimbre(id)) {
+        deps.engine.setTimbre(id, name)
       }
     }
   }

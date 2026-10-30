@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Session } from '../src/lib/stores/session'
-import type { SessionDeps, EngineLike, RecorderLike } from '../src/lib/stores/session'
+import type { SessionDeps, EngineLike, Mix, RecorderLike } from '../src/lib/stores/session'
 import { defaultTimbre } from '../src/lib/audio/timbres'
+import { CHANNELS, type ChannelId } from '../src/lib/audio/engine'
 import type { ChannelTargets } from '../src/lib/domain/mapping'
 import type { WeatherReading } from '../src/lib/domain/types'
 import type { Place } from '../src/lib/weather/photon'
@@ -101,6 +102,14 @@ function makeDeps(overrides: Partial<SessionDeps> = {}) {
   }
   return { deps, engine, recorder, savePlace, saveMix }
 }
+
+function channelGains<T>(value: T): Record<ChannelId, T> {
+  const map = {} as Record<ChannelId, T>
+  for (const id of CHANNELS) map[id] = value
+  return map
+}
+
+const channelMutes = channelGains<boolean>
 
 describe('Session', () => {
   it('sets the place and saves it before the weather arrives', async () => {
@@ -257,12 +266,13 @@ describe('Session', () => {
     session.dispose()
   })
 
-  it('uses the default timbre for every channel before any choice', () => {
+  it('uses the default timbre for the two musical voices', () => {
     const { deps } = makeDeps()
     const session = new Session(deps)
 
-    expect(session.snapshot.timbre.wind).toBe(defaultTimbre('wind'))
-    expect(session.snapshot.timbre.temperature).toBe(defaultTimbre('temperature'))
+    expect(session.snapshot.timbre.pad).toBe(defaultTimbre('pad'))
+    expect(session.snapshot.timbre.motif).toBe(defaultTimbre('motif'))
+    expect(session.snapshot.timbre.wind).toBeUndefined()
 
     session.dispose()
   })
@@ -271,8 +281,8 @@ describe('Session', () => {
     const { deps, engine } = makeDeps()
     const session = new Session(deps)
 
-    session.setTimbre('wind', 'thunder')
-    expect(session.snapshot.timbre.wind).toBe(defaultTimbre('wind'))
+    session.setTimbre('pad', 'thunder')
+    expect(session.snapshot.timbre.pad).toBe(defaultTimbre('pad'))
     expect(engine.timbres).toEqual([])
 
     session.dispose()
@@ -282,10 +292,10 @@ describe('Session', () => {
     const { deps, engine, saveMix } = makeDeps()
     const session = new Session(deps)
 
-    session.setTimbre('wind', 'roar')
+    session.setTimbre('pad', 'choir')
 
-    expect(session.snapshot.timbre.wind).toBe('roar')
-    expect(engine.timbres).toContainEqual({ id: 'wind', name: 'roar' })
+    expect(session.snapshot.timbre.pad).toBe('choir')
+    expect(engine.timbres).toContainEqual({ id: 'pad', name: 'choir' })
     expect(saveMix).toHaveBeenCalled()
 
     session.dispose()
@@ -294,24 +304,33 @@ describe('Session', () => {
   it('restores persisted timbres and restores the default for a bad stored name', () => {
     const { deps, engine } = makeDeps({
       loadMix: () => ({
-        gain: { wind: 1, gust: 1, rain: 1, pressure: 1, humidity: 1, temperature: 1 },
-        muted: { wind: false, gust: false, rain: false, pressure: false, humidity: false, temperature: false },
-        timbre: {
-          wind: 'whistle',
-          gust: 'not-a-timbre',
-          rain: 'patter',
-          pressure: 'sine',
-          humidity: 'pad',
-          temperature: 'shimmer',
-        },
+        gain: channelGains(1),
+        muted: channelMutes(false),
+        timbre: { pad: 'glass', motif: 'not-a-timbre' },
       }),
     })
     const session = new Session(deps)
 
-    expect(session.snapshot.timbre.wind).toBe('whistle')
-    expect(session.snapshot.timbre.rain).toBe('patter')
-    expect(session.snapshot.timbre.gust).toBe(defaultTimbre('gust'))
-    expect(engine.timbres).toContainEqual({ id: 'wind', name: 'whistle' })
+    expect(session.snapshot.timbre.pad).toBe('glass')
+    expect(session.snapshot.timbre.motif).toBe(defaultTimbre('motif'))
+    expect(engine.timbres).toContainEqual({ id: 'pad', name: 'glass' })
+
+    session.dispose()
+  })
+
+  it('opens a v1 mix without a crash and keeps the gains it still has', () => {
+    const v1 = {
+      gain: { wind: 0.4, humidity: 0.7 },
+      muted: { humidity: true },
+      timbre: { humidity: 'choir' },
+    }
+    const { deps } = makeDeps({ loadMix: () => v1 as unknown as Mix })
+    const session = new Session(deps)
+
+    expect(session.snapshot.channelGain.wind).toBe(0.4)
+    expect(session.snapshot.channelGain.pad).toBe(1)
+    expect(session.snapshot.channelGain.motif).toBe(1)
+    expect(session.snapshot.channelMuted.pad).toBe(false)
 
     session.dispose()
   })

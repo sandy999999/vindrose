@@ -26,21 +26,23 @@
 
   const STRIPS: Array<{ id: ChannelId; label: string }> = [
     { id: 'wind', label: 'WIN' },
-    { id: 'gust', label: 'GUS' },
     { id: 'rain', label: 'RAI' },
+    { id: 'gust', label: 'GUS' },
     { id: 'pressure', label: 'PRE' },
-    { id: 'humidity', label: 'HUM' },
-    { id: 'temperature', label: 'TEM' },
+    { id: 'thunder', label: 'THU' },
+    { id: 'pad', label: 'PAD' },
+    { id: 'motif', label: 'MOT' },
   ]
 
   const targets = $derived(view.reading ? mapWeather(view.reading, view.tendency) : null)
   const levels: Record<ChannelId, number> = $derived({
     wind: targets?.wind.level ?? 0,
-    gust: targets?.gust.level ?? 0,
     rain: targets?.rain.level ?? 0,
+    gust: targets?.gust.level ?? 0,
     pressure: targets?.pressure.level ?? 0,
-    humidity: targets?.humidity.level ?? 0,
-    temperature: targets?.temperature.level ?? 0,
+    thunder: 0,
+    pad: targets?.humidity.level ?? 0,
+    motif: targets?.temperature.level ?? 0,
   })
   const allMuted = $derived(view.mutedAll)
   const reverse = latestResult<Place | null>()
@@ -183,6 +185,7 @@
 
   function cycleTimbre(id: ChannelId): void {
     const options = TIMBRES[id]
+    if (!options) return
     const index = options.findIndex((option) => option.name === view.timbre[id])
     const next = options[(index + 1) % options.length]
     if (next) session.setTimbre(id, next.name)

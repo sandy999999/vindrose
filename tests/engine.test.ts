@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AudioEngine } from '../src/lib/audio/engine'
+import { AudioEngine, CHANNELS, eventTarget } from '../src/lib/audio/engine'
 import { FakeAudioContext } from './fakeAudio'
 
 function makeEngine() {
@@ -56,5 +56,27 @@ describe('AudioEngine pause', () => {
 
     expect(ctx.state).toBe('running')
     expect(ctx.resumptions).toBe(2)
+  })
+})
+
+describe('AudioEngine channels', () => {
+  it('runs seven channels in strip order', () => {
+    expect(CHANNELS).toEqual(['wind', 'rain', 'gust', 'pressure', 'thunder', 'pad', 'motif'])
+  })
+
+  it('passes the tempo to the scheduler', () => {
+    const fake = new FakeAudioContext()
+    const engine = new AudioEngine(fake as unknown as AudioContext)
+    engine.setTempo(63)
+    expect(engine.tempo).toBe(63)
+  })
+
+  it('routes every event to its channel', () => {
+    expect(eventTarget({ type: 'rain-change', state: 'rain' })).toBe('rain')
+    expect(eventTarget({ type: 'pressure-glide', direction: 'up' })).toBe('pressure')
+    expect(eventTarget({ type: 'direction-sweep', pan: 0 })).toBe('wind')
+    expect(eventTarget({ type: 'temperature-note', note: 60 })).toBe('motif')
+    expect(eventTarget({ type: 'thunder-crack', strength: 1 })).toBe('thunder')
+    expect(eventTarget({ type: 'bell' })).toBe('pad')
   })
 })

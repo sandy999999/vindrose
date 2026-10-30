@@ -1,5 +1,6 @@
 import type { ChannelTargets } from '../domain/mapping'
 import type { AudioEvent } from '../domain/events'
+import type { PlaceProfile } from '../domain/place'
 import { Scheduler } from './scheduler'
 import { WindChannel } from './channels/wind'
 import { GustChannel } from './channels/gust'
@@ -8,14 +9,16 @@ import { PressureChannel } from './channels/pressure'
 import { HumidityChannel } from './channels/humidity'
 import { TemperatureChannel } from './channels/temperature'
 import { TimbreChannel } from './channels/timbre'
+import { SilentChannel } from './channels/silent'
 import { defaultTimbre, type TimbreName } from './timbres'
 import { createReverb } from './reverb'
 
-export type ChannelId = 'wind' | 'gust' | 'rain' | 'pressure' | 'humidity' | 'temperature'
+export type ChannelId = 'wind' | 'rain' | 'gust' | 'pressure' | 'thunder' | 'pad' | 'motif'
 
 export interface InstrumentChannel {
   readonly output: GainNode
   update(target: unknown, tau: number): void
+  setProfile?(profile: PlaceProfile): void
   fire?(event: AudioEvent): void
   onBar?(time: number, bar: number): void
   dispose(): void
@@ -23,11 +26,12 @@ export interface InstrumentChannel {
 
 export const CHANNELS: ChannelId[] = [
   'wind',
-  'gust',
   'rain',
+  'gust',
   'pressure',
-  'humidity',
-  'temperature',
+  'thunder',
+  'pad',
+  'motif',
 ]
 
 export const BPM = 56
@@ -51,7 +55,11 @@ export function eventTarget(event: AudioEvent): ChannelId {
     case 'direction-sweep':
       return 'wind'
     case 'temperature-note':
-      return 'temperature'
+      return 'motif'
+    case 'thunder-crack':
+      return 'thunder'
+    case 'bell':
+      return 'pad'
   }
 }
 
@@ -71,6 +79,7 @@ export class AudioEngine {
   private started = false
   private frozen = false
   private masterValue = 0.8
+  private tempoValue = BPM
   private mutedAll = false
   private pauseTimer: ReturnType<typeof setTimeout> | null = null
   private onBarHandler: ((time: number, bar: number) => void) | null = null
@@ -104,9 +113,7 @@ export class AudioEngine {
     }
 
     for (const id of CHANNELS) {
-      const channel = new TimbreChannel(ctx, (name) => this.createVoice(id, name), defaultTimbre(id))
-      this.timbreChannels.set(id, channel)
-      this.attachChannel(id, channel)
+      this.attachChannel(id, this.createChannel(id))
     }
 
     this.scheduler = new Scheduler(
@@ -185,13 +192,33 @@ export class AudioEngine {
     this.timbreChannels.get(channel)?.setTimbre(name)
   }
 
+  setTempo(bpm: number): void {
+    this.tempoValue = bpm
+    this.scheduler.setBpm(bpm)
+  }
+
+  get tempo(): number {
+    return this.tempoValue
+  }
+
+  get channelCount(): number {
+    return this.channels.size
+  }
+
+  setProfile(profile: PlaceProfile): void {
+    this.setTempo(profile.tempo)
+    for (const channel of this.channels.values()) {
+      channel.setProfile?.(profile)
+    }
+  }
+
   applyTargets(targets: ChannelTargets, tau = 20): void {
     this.channels.get('wind')?.update(targets.wind, tau)
     this.channels.get('gust')?.update(targets.gust, tau)
     this.channels.get('rain')?.update(targets.rain, tau)
     this.channels.get('pressure')?.update(targets.pressure, tau)
-    this.channels.get('humidity')?.update(targets.humidity, tau)
-    this.channels.get('temperature')?.update(targets.temperature, tau)
+    this.channels.get('pad')?.update(targets.humidity, tau)
+    this.channels.get('motif')?.update(targets.temperature, tau)
     this.reverb?.setWet(targets.reverb.wet, targets.reverb.preDelay)
   }
 
@@ -246,19 +273,34 @@ export class AudioEngine {
     this.mixGains.clear()
   }
 
+  private createChannel(id: ChannelId): InstrumentChannel {
+    if (id !== 'pad' && id !== 'motif') {
+      return this.createVoice(id, defaultTimbre(id))
+    }
+    const channel = new TimbreChannel(
+      this.ctx,
+      (name) => this.createVoice(id, name),
+      defaultTimbre(id),
+    )
+    this.timbreChannels.set(id, channel)
+    return channel
+  }
+
   private createVoice(id: ChannelId, name: TimbreName): InstrumentChannel {
     switch (id) {
       case 'wind':
-        return new WindChannel(this.ctx, name)
-      case 'gust':
-        return new GustChannel(this.ctx, name)
+        return new WindChannel(this.ctx)
       case 'rain':
-        return new RainChannel(this.ctx, name)
+        return new RainChannel(this.ctx)
+      case 'gust':
+        return new GustChannel(this.ctx)
       case 'pressure':
-        return new PressureChannel(this.ctx, name)
-      case 'humidity':
+        return new PressureChannel(this.ctx)
+      case 'thunder':
+        return new SilentChannel(this.ctx)
+      case 'pad':
         return new HumidityChannel(this.ctx, name)
-      case 'temperature':
+      case 'motif':
         return new TemperatureChannel(this.ctx, name)
     }
   }

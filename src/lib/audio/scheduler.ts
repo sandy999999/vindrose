@@ -22,7 +22,7 @@ export class Scheduler {
   private timer: ReturnType<typeof setInterval> | null = null
 
   constructor(
-    private readonly bpm: number,
+    private bpm: number,
     private readonly onBar: (time: number, bar: number) => void,
     private readonly now: () => number,
   ) {}
@@ -50,6 +50,10 @@ export class Scheduler {
       this.nextBar += 1
       time = this.origin + this.nextBar * barDuration(this.bpm)
     }
+  }
+
+  setBpm(bpm: number): void {
+    this.bpm = bpm
   }
 
   get barOrigin(): number {
