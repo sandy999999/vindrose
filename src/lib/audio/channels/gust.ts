@@ -1,10 +1,15 @@
 import type { AudioEvent } from '../../domain/events'
-import { midiToHz, quantizeToScale } from '../../domain/harmony'
 import type { InstrumentChannel } from '../engine'
 import { createNoiseBuffer } from '../noise'
-import type { TimbreName } from '../timbres'
 
 const MAX_VOICES = 24
+const SWEEP_START = 1800
+const SWEEP_END = 300
+const MIN_BURST = 0.3
+const MAX_BURST = 0.8
+const THUMP_LOW = 40
+const THUMP_SPAN = 50
+const THUMP_LEVEL = 0.35
 
 export class GustChannel implements InstrumentChannel {
   readonly output: GainNode
@@ -12,13 +17,10 @@ export class GustChannel implements InstrumentChannel {
   private readonly noise: AudioBuffer
   private active = 0
 
-  constructor(
-    private readonly ctx: AudioContext,
-    private readonly timbre: TimbreName = 'ping',
-  ) {
+  constructor(private readonly ctx: AudioContext) {
     this.output = ctx.createGain()
-    this.output.gain.value = 0.9
-    this.noise = createNoiseBuffer(ctx, 0.02, 1)
+    this.output.gain.value = 0
+    this.noise = createNoiseBuffer(ctx, 1)
   }
 
   fire(event: AudioEvent): void {
@@ -29,72 +31,53 @@ export class GustChannel implements InstrumentChannel {
     for (let i = 0; i < count; i += 1) {
       if (this.active >= MAX_VOICES) return
       const at = now + (i / count) * 0.6 + Math.random() * 0.01
-      this.click(at)
+      this.burst(at, event.strength * (0.6 + Math.random() * 0.4))
     }
   }
 
-  update(): void {
-    /* the gust cloud is event driven */
+  update(target: unknown, tau: number): void {
+    const gust = target as { level: number }
+    this.output.gain.setTargetAtTime(gust.level, this.ctx.currentTime, tau)
   }
 
-  private click(at: number): void {
+  private burst(at: number, strength: number): void {
     const ctx = this.ctx
+    const duration = MIN_BURST + Math.random() * (MAX_BURST - MIN_BURST)
+
     const source = ctx.createBufferSource()
     source.buffer = this.noise
 
     const filter = ctx.createBiquadFilter()
+    filter.type = 'lowpass'
+    filter.Q.value = 1.2
+    filter.frequency.setValueAtTime(SWEEP_START, at)
+    filter.frequency.exponentialRampToValueAtTime(SWEEP_END, at + duration)
+
     const envelope = ctx.createGain()
+    envelope.gain.setValueAtTime(0.0001, at)
+    envelope.gain.linearRampToValueAtTime(strength, at + duration * 0.35)
+    envelope.gain.exponentialRampToValueAtTime(0.0001, at + duration)
+
     const panner = ctx.createStereoPanner()
     panner.pan.value = Math.random() * 2 - 1
 
-    const ping = ctx.createOscillator()
-    const pingGain = ctx.createGain()
+    const thumpHz = THUMP_LOW + Math.random() * THUMP_SPAN
+    const thump = ctx.createOscillator()
+    thump.type = 'sine'
+    thump.frequency.setValueAtTime(thumpHz, at)
+    thump.frequency.exponentialRampToValueAtTime(thumpHz * 0.7, at + 0.2)
+
+    const thumpGain = ctx.createGain()
+    thumpGain.gain.setValueAtTime(0.0001, at)
+    thumpGain.gain.linearRampToValueAtTime(strength * THUMP_LEVEL, at + 0.01)
+    thumpGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.25)
 
     source.connect(filter)
     filter.connect(envelope)
     envelope.connect(panner)
-    ping.connect(pingGain)
-    pingGain.connect(panner)
+    thump.connect(thumpGain)
+    thumpGain.connect(panner)
     panner.connect(this.output)
-
-    let stopAt = at + 0.13
-
-    if (this.timbre === 'tick') {
-      filter.type = 'highpass'
-      filter.frequency.value = 3200
-      envelope.gain.setValueAtTime(0.0001, at)
-      envelope.gain.linearRampToValueAtTime(0.55, at + 0.001)
-      envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.03)
-      pingGain.gain.value = 0
-      stopAt = at + 0.04
-    } else if (this.timbre === 'wood') {
-      const base = midiToHz(quantizeToScale(62 + Math.floor(Math.random() * 12)))
-      filter.type = 'bandpass'
-      filter.frequency.value = 900
-      filter.Q.value = 6
-      envelope.gain.setValueAtTime(0.0001, at)
-      envelope.gain.linearRampToValueAtTime(0.7, at + 0.002)
-      envelope.gain.exponentialRampToValueAtTime(0.0001, at + 0.05)
-      ping.type = 'triangle'
-      ping.frequency.setValueAtTime(base, at)
-      ping.frequency.exponentialRampToValueAtTime(base * 0.94, at + 0.09)
-      pingGain.gain.setValueAtTime(0.0001, at)
-      pingGain.gain.linearRampToValueAtTime(0.3, at + 0.002)
-      pingGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.1)
-      stopAt = at + 0.12
-    } else {
-      filter.type = 'highpass'
-      filter.frequency.value = 1200
-      envelope.gain.setValueAtTime(0.001, at)
-      envelope.gain.linearRampToValueAtTime(0.8, at + 0.001)
-      envelope.gain.exponentialRampToValueAtTime(0.001, at + 0.06)
-      ping.type = 'sine'
-      ping.frequency.value = midiToHz(quantizeToScale(72 + Math.floor(Math.random() * 12)))
-      pingGain.gain.setValueAtTime(0.0001, at)
-      pingGain.gain.linearRampToValueAtTime(0.25, at + 0.002)
-      pingGain.gain.exponentialRampToValueAtTime(0.0001, at + 0.12)
-      stopAt = at + 0.13
-    }
 
     this.active += 1
     source.onended = () => {
@@ -102,15 +85,15 @@ export class GustChannel implements InstrumentChannel {
       source.disconnect()
       filter.disconnect()
       envelope.disconnect()
-      ping.disconnect()
-      pingGain.disconnect()
+      thump.disconnect()
+      thumpGain.disconnect()
       panner.disconnect()
     }
 
     source.start(at)
-    source.stop(stopAt)
-    ping.start(at)
-    ping.stop(stopAt)
+    source.stop(at + duration)
+    thump.start(at)
+    thump.stop(at + 0.3)
   }
 
   dispose(): void {

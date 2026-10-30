@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { CHANNELS } from '../src/lib/audio/engine'
-import { TIMBRES, defaultTimbre, isTimbre } from '../src/lib/audio/timbres'
+import { TIMBRES, defaultTimbre, defaultTimbres, isTimbre } from '../src/lib/audio/timbres'
+
+const MUSICAL = ['motif', 'pad'] as const
 
 describe('timbre table', () => {
-  it('gives every channel exactly three timbres with unique names', () => {
-    for (const id of CHANNELS) {
-      const options = TIMBRES[id]
+  it('gives pad and motif three timbres with unique names', () => {
+    expect(Object.keys(TIMBRES).sort()).toEqual(['motif', 'pad'])
+    for (const id of MUSICAL) {
+      const options = TIMBRES[id]!
       expect(options).toHaveLength(3)
       const names = options.map((option) => option.name)
       expect(new Set(names).size).toBe(3)
@@ -16,15 +18,23 @@ describe('timbre table', () => {
   })
 
   it('uses the first entry as the default', () => {
-    for (const id of CHANNELS) {
-      expect(defaultTimbre(id)).toBe(TIMBRES[id][0]?.name)
+    for (const id of MUSICAL) {
+      expect(defaultTimbre(id)).toBe(TIMBRES[id]?.[0]?.name)
     }
   })
 
+  it('defaults only the two musical voices', () => {
+    const defaults = defaultTimbres()
+    expect(Object.keys(defaults).sort()).toEqual(['motif', 'pad'])
+    expect(defaults.pad).toBe(defaultTimbre('pad'))
+    expect(defaults.motif).toBe(defaultTimbre('motif'))
+  })
+
   it('rejects names outside the channel table', () => {
-    expect(isTimbre('wind', 'hiss')).toBe(true)
-    expect(isTimbre('wind', 'roar')).toBe(true)
-    expect(isTimbre('wind', 'bell')).toBe(false)
-    expect(isTimbre('wind', '')).toBe(false)
+    expect(isTimbre('pad', 'pad')).toBe(true)
+    expect(isTimbre('pad', 'bell')).toBe(false)
+    expect(isTimbre('motif', 'bell')).toBe(true)
+    expect(isTimbre('wind', 'hiss')).toBe(false)
+    expect(isTimbre('pad', '')).toBe(false)
   })
 })

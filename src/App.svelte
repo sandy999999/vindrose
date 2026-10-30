@@ -12,7 +12,7 @@
   import type { ChannelId } from './lib/audio/engine'
   import { TIMBRES } from './lib/audio/timbres'
   import { recordAlert } from './lib/audio/recorder'
-  import { mapWeather } from './lib/domain/mapping'
+  import { recordingName } from './lib/domain/recordingName'
   import { getSession } from './lib/stores/live'
   import { latestResult } from './lib/weather/latest'
   import type { SessionState } from './lib/stores/session'
@@ -26,22 +26,14 @@
 
   const STRIPS: Array<{ id: ChannelId; label: string }> = [
     { id: 'wind', label: 'WIN' },
-    { id: 'gust', label: 'GUS' },
     { id: 'rain', label: 'RAI' },
+    { id: 'gust', label: 'GUS' },
     { id: 'pressure', label: 'PRE' },
-    { id: 'humidity', label: 'HUM' },
-    { id: 'temperature', label: 'TEM' },
+    { id: 'thunder', label: 'THU' },
+    { id: 'pad', label: 'PAD' },
+    { id: 'motif', label: 'MOT' },
   ]
 
-  const targets = $derived(view.reading ? mapWeather(view.reading, view.tendency) : null)
-  const levels: Record<ChannelId, number> = $derived({
-    wind: targets?.wind.level ?? 0,
-    gust: targets?.gust.level ?? 0,
-    rain: targets?.rain.level ?? 0,
-    pressure: targets?.pressure.level ?? 0,
-    humidity: targets?.humidity.level ?? 0,
-    temperature: targets?.temperature.level ?? 0,
-  })
   const allMuted = $derived(view.mutedAll)
   const reverse = latestResult<Place | null>()
   let warned = false
@@ -156,22 +148,16 @@
       toast = 'Nothing was recorded'
       return
     }
-    download(result.blob, result.place)
+    download(result.blob, result.place, result.pieceSeed)
     const length = clock(result.durationSec)
     toast = limitReached ? `10 min limit reached · saved ${length}` : `Saved ${length}`
   }
 
-  function download(blob: Blob, place: Place | null): void {
-    const slug =
-      (place?.name ?? 'vindrose')
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '') || 'vindrose'
-    const date = new Date().toISOString().slice(0, 10)
+  function download(blob: Blob, place: Place | null, seed: number): void {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `vindrose-${slug}-${date}.wav`
+    link.download = recordingName(place, new Date(), seed)
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 10_000)
   }
@@ -183,6 +169,7 @@
 
   function cycleTimbre(id: ChannelId): void {
     const options = TIMBRES[id]
+    if (!options) return
     const index = options.findIndex((option) => option.name === view.timbre[id])
     const next = options[(index + 1) % options.length]
     if (next) session.setTimbre(id, next.name)
@@ -204,7 +191,12 @@
 
   <BottomSheet>
     {#snippet header()}
-      <WeatherHeader place={view.place} reading={view.reading} stale={view.stale} />
+      <WeatherHeader
+        place={view.place}
+        reading={view.reading}
+        stale={view.stale}
+        section={view.section}
+      />
       <ParameterChips reading={view.reading} />
     {/snippet}
 
@@ -214,7 +206,7 @@
           <ChannelStrip
             id={strip.id}
             label={strip.label}
-            value={levels[strip.id]}
+            value={view.levels[strip.id]}
             gain={view.channelGain[strip.id]}
             muted={view.channelMuted[strip.id]}
             timbre={view.timbre[strip.id]}

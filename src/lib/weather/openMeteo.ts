@@ -127,3 +127,26 @@ export async function fetchWeather(
 
   return parse(body)
 }
+
+export async function fetchElevation(
+  lat: number,
+  lon: number,
+  fetchImpl: typeof fetch = fetch,
+): Promise<number | null> {
+  const url = new URL('https://api.open-meteo.com/v1/elevation')
+  url.searchParams.set('latitude', String(lat))
+  url.searchParams.set('longitude', String(lon))
+
+  try {
+    const response = await fetchImpl(url)
+    if (!response.ok) return null
+    const body: unknown = await response.json()
+    if (typeof body !== 'object' || body === null) return null
+    const elevations = (body as Record<string, unknown>).elevation
+    if (!Array.isArray(elevations)) return null
+    const first: unknown = elevations[0]
+    return typeof first === 'number' && Number.isFinite(first) ? first : null
+  } catch {
+    return null
+  }
+}

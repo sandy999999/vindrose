@@ -9,12 +9,12 @@
     value: number
     gain: number
     muted: boolean
-    timbre: TimbreName
-    timbreOptions: TimbreOption[]
+    timbre?: TimbreName
+    timbreOptions?: TimbreOption[]
     onGain: (value: number) => void
     onToggleMute: () => void
-    onNextTimbre: () => void
-    onPickTimbre: (name: TimbreName) => void
+    onNextTimbre?: () => void
+    onPickTimbre?: (name: TimbreName) => void
   }
 
   let {
@@ -23,7 +23,7 @@
     value,
     gain,
     muted,
-    timbre,
+    timbre = '',
     timbreOptions,
     onGain,
     onToggleMute,
@@ -35,11 +35,12 @@
 
   const NAMES: Record<ChannelId, string> = {
     wind: 'Wind',
-    gust: 'Gust',
     rain: 'Rain',
+    gust: 'Gust',
     pressure: 'Pressure',
-    humidity: 'Humidity',
-    temperature: 'Temperature',
+    thunder: 'Thunder',
+    pad: 'Pad',
+    motif: 'Motif',
   }
 
   let menuOpen = $state(false)
@@ -47,7 +48,7 @@
   let pressTimer: ReturnType<typeof setTimeout> | null = null
 
   const current = $derived(
-    timbreOptions.find((option) => option.name === timbre) ?? timbreOptions[0],
+    timbreOptions?.find((option) => option.name === timbre) ?? timbreOptions?.[0],
   )
 
   function clearPress(): void {
@@ -73,7 +74,7 @@
       held = false
       return
     }
-    onNextTimbre()
+    onNextTimbre?.()
   }
 
   function cancelPress(): void {
@@ -83,7 +84,7 @@
 
   function pick(name: TimbreName): void {
     menuOpen = false
-    onPickTimbre(name)
+    onPickTimbre?.(name)
   }
 
   function stop(event: Event): void {
@@ -136,29 +137,33 @@
     </div>
   </div>
 
-  <button
-    type="button"
-    class="timbre"
-    aria-haspopup="dialog"
-    aria-expanded={menuOpen}
-    aria-label={`${NAMES[id]} timbre: ${current?.label ?? timbre}. Tap to cycle, hold to choose`}
-    title={`${current?.label ?? timbre} · tap to cycle, hold for all`}
-    onpointerdown={startPress}
-    onpointerup={endPress}
-    onpointerleave={cancelPress}
-    onpointercancel={cancelPress}
-    oncontextmenu={(event) => event.preventDefault()}
-    onclick={(event) => {
-      if (event.detail === 0) onNextTimbre()
-    }}
-  >
-    {current?.label ?? timbre}
-  </button>
+  {#if timbreOptions}
+    <button
+      type="button"
+      class="timbre"
+      aria-haspopup="dialog"
+      aria-expanded={menuOpen}
+      aria-label={`${NAMES[id]} timbre: ${current?.label ?? timbre}. Tap to cycle, hold to choose`}
+      title={`${current?.label ?? timbre} · tap to cycle, hold for all`}
+      onpointerdown={startPress}
+      onpointerup={endPress}
+      onpointerleave={cancelPress}
+      onpointercancel={cancelPress}
+      oncontextmenu={(event) => event.preventDefault()}
+      onclick={(event) => {
+        if (event.detail === 0) onNextTimbre?.()
+      }}
+    >
+      {current?.label ?? timbre}
+    </button>
+  {:else}
+    <span class="timbre-slot" aria-hidden="true"></span>
+  {/if}
 
   <span class="label">{label}</span>
 </div>
 
-{#if menuOpen}
+{#if menuOpen && timbreOptions}
   <div class="menu-layer">
     <button
       type="button"
@@ -294,6 +299,12 @@
     touch-action: none;
     -webkit-user-select: none;
     user-select: none;
+  }
+
+  .timbre-slot {
+    display: block;
+    min-height: 44px;
+    min-width: 44px;
   }
 
   .timbre:hover,

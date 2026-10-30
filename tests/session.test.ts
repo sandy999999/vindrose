@@ -1,8 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Session } from '../src/lib/stores/session'
-import type { SessionDeps, EngineLike, RecorderLike } from '../src/lib/stores/session'
+import type { SessionDeps, EngineLike, Mix, RecorderLike } from '../src/lib/stores/session'
 import { defaultTimbre } from '../src/lib/audio/timbres'
+import { CHANNELS, type ChannelId } from '../src/lib/audio/engine'
 import type { ChannelTargets } from '../src/lib/domain/mapping'
+import { bellAt } from '../src/lib/domain/director'
+import { placeProfile, type PlaceProfile } from '../src/lib/domain/place'
 import type { WeatherReading } from '../src/lib/domain/types'
 import type { Place } from '../src/lib/weather/photon'
 
@@ -33,6 +36,8 @@ class FakeEngine implements EngineLike {
   mutedAll: boolean[] = []
   frozen = false
   timbres: Array<{ id: string; name: string }> = []
+  profiles: PlaceProfile[] = []
+  tempos: number[] = []
 
   async start(): Promise<void> {
     this.started += 1
@@ -60,6 +65,12 @@ class FakeEngine implements EngineLike {
   }
   setTimbre(id: string, name: string): void {
     this.timbres.push({ id, name })
+  }
+  setProfile(profile: PlaceProfile, _seconds?: number): void {
+    this.profiles.push(profile)
+  }
+  setTempo(bpm: number): void {
+    this.tempos.push(bpm)
   }
   fire(events: unknown[]): void {
     this.events.push(...events)
@@ -102,6 +113,14 @@ function makeDeps(overrides: Partial<SessionDeps> = {}) {
   return { deps, engine, recorder, savePlace, saveMix }
 }
 
+function channelGains<T>(value: T): Record<ChannelId, T> {
+  const map = {} as Record<ChannelId, T>
+  for (const id of CHANNELS) map[id] = value
+  return map
+}
+
+const channelMutes = channelGains<boolean>
+
 describe('Session', () => {
   it('sets the place and saves it before the weather arrives', async () => {
     const { deps, savePlace } = makeDeps()
@@ -112,6 +131,18 @@ describe('Session', () => {
     expect(savePlace).toHaveBeenCalledWith(place)
 
     await pending
+    session.dispose()
+  })
+
+  it('derives the place profile when a place is chosen', async () => {
+    const { deps } = makeDeps()
+    const session = new Session(deps)
+
+    await session.selectPlace(place)
+    expect(session.snapshot.profile?.mode).toBe('aeolian')
+    expect(session.snapshot.profile?.tempo).toBeGreaterThanOrEqual(48)
+    expect(session.snapshot.profile?.tempo).toBeLessThanOrEqual(64)
+
     session.dispose()
   })
 
@@ -257,12 +288,13 @@ describe('Session', () => {
     session.dispose()
   })
 
-  it('uses the default timbre for every channel before any choice', () => {
+  it('uses the default timbre for the two musical voices', () => {
     const { deps } = makeDeps()
     const session = new Session(deps)
 
-    expect(session.snapshot.timbre.wind).toBe(defaultTimbre('wind'))
-    expect(session.snapshot.timbre.temperature).toBe(defaultTimbre('temperature'))
+    expect(session.snapshot.timbre.pad).toBe(defaultTimbre('pad'))
+    expect(session.snapshot.timbre.motif).toBe(defaultTimbre('motif'))
+    expect(session.snapshot.timbre.wind).toBeUndefined()
 
     session.dispose()
   })
@@ -271,8 +303,8 @@ describe('Session', () => {
     const { deps, engine } = makeDeps()
     const session = new Session(deps)
 
-    session.setTimbre('wind', 'thunder')
-    expect(session.snapshot.timbre.wind).toBe(defaultTimbre('wind'))
+    session.setTimbre('pad', 'thunder')
+    expect(session.snapshot.timbre.pad).toBe(defaultTimbre('pad'))
     expect(engine.timbres).toEqual([])
 
     session.dispose()
@@ -282,10 +314,10 @@ describe('Session', () => {
     const { deps, engine, saveMix } = makeDeps()
     const session = new Session(deps)
 
-    session.setTimbre('wind', 'roar')
+    session.setTimbre('pad', 'choir')
 
-    expect(session.snapshot.timbre.wind).toBe('roar')
-    expect(engine.timbres).toContainEqual({ id: 'wind', name: 'roar' })
+    expect(session.snapshot.timbre.pad).toBe('choir')
+    expect(engine.timbres).toContainEqual({ id: 'pad', name: 'choir' })
     expect(saveMix).toHaveBeenCalled()
 
     session.dispose()
@@ -294,25 +326,148 @@ describe('Session', () => {
   it('restores persisted timbres and restores the default for a bad stored name', () => {
     const { deps, engine } = makeDeps({
       loadMix: () => ({
-        gain: { wind: 1, gust: 1, rain: 1, pressure: 1, humidity: 1, temperature: 1 },
-        muted: { wind: false, gust: false, rain: false, pressure: false, humidity: false, temperature: false },
-        timbre: {
-          wind: 'whistle',
-          gust: 'not-a-timbre',
-          rain: 'patter',
-          pressure: 'sine',
-          humidity: 'pad',
-          temperature: 'shimmer',
-        },
+        gain: channelGains(1),
+        muted: channelMutes(false),
+        timbre: { pad: 'glass', motif: 'not-a-timbre' },
       }),
     })
     const session = new Session(deps)
 
-    expect(session.snapshot.timbre.wind).toBe('whistle')
-    expect(session.snapshot.timbre.rain).toBe('patter')
-    expect(session.snapshot.timbre.gust).toBe(defaultTimbre('gust'))
-    expect(engine.timbres).toContainEqual({ id: 'wind', name: 'whistle' })
+    expect(session.snapshot.timbre.pad).toBe('glass')
+    expect(session.snapshot.timbre.motif).toBe(defaultTimbre('motif'))
+    expect(engine.timbres).toContainEqual({ id: 'pad', name: 'glass' })
 
+    session.dispose()
+  })
+
+  it('opens a v1 mix and carries the pad and motif gains over', () => {
+    const v1 = {
+      gain: { wind: 0.4, humidity: 0.7, temperature: 0.5 },
+      muted: { humidity: true },
+      timbre: { humidity: 'choir', temperature: 'bell' },
+    }
+    const { deps, engine } = makeDeps({ loadMix: () => v1 as unknown as Mix })
+    const session = new Session(deps)
+
+    expect(session.snapshot.channelGain.wind).toBe(0.4)
+    expect(session.snapshot.channelGain.pad).toBe(0.7)
+    expect(session.snapshot.channelGain.motif).toBe(0.5)
+    expect(session.snapshot.channelMuted.pad).toBe(true)
+    expect(session.snapshot.channelMuted.motif).toBe(false)
+    expect(session.snapshot.timbre.pad).toBe('choir')
+    expect(session.snapshot.timbre.motif).toBe('bell')
+    expect(engine.mixes).toContainEqual({ id: 'pad', gain: 0.7, muted: true })
+
+    session.dispose()
+  })
+
+  it('freezes the piece clock while paused and continues the same plan', async () => {
+    let now = 0
+    const { deps } = makeDeps({ now: () => now })
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    const seed = session.snapshot.pieceSeed
+    now = 30_000
+    expect(session.elapsedSec).toBeCloseTo(30)
+    session.pause()
+    now = 3_600_000
+    expect(session.elapsedSec).toBeCloseTo(30)
+    await session.play()
+    expect(session.snapshot.pieceSeed).toBe(seed)
+    expect(session.elapsedSec).toBeCloseTo(30)
+    session.dispose()
+  })
+
+  it('applies the section mask and publishes post-mask levels', async () => {
+    let now = 0
+    const { deps } = makeDeps({ now: () => now })
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    now = 5_000
+    session.tick()
+    expect(session.snapshot.section).toBe('emerge')
+    expect(session.snapshot.levels.pad).toBeGreaterThan(0)
+    const expose = session.snapshot.plan!.sections.find((s) => s.kind === 'expose')!
+    now = expose.startSec * 1000 + 1000
+    session.tick()
+    expect(session.snapshot.section).toBe('expose')
+    expect(session.snapshot.levels.pad).toBe(0)
+    session.dispose()
+  })
+
+  it('starts a new piece and crossfades when the place changes', async () => {
+    const { deps, engine } = makeDeps()
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    const first = session.snapshot.pieceSeed
+    await session.selectPlace(otherPlace)
+    expect(session.snapshot.pieceSeed).not.toBe(first)
+    expect(engine.profiles.at(-1)?.mode).toBe(placeProfile(59.91, 10.75).mode)
+    session.dispose()
+  })
+
+  it('keeps a late elevation result for the next piece', async () => {
+    let now = 0
+    let resolveElevation: (value: number | null) => void = () => undefined
+    const { deps, engine } = makeDeps({
+      now: () => now,
+      elevation: () =>
+        new Promise((resolve) => {
+          resolveElevation = resolve
+        }),
+    })
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    const applied = engine.profiles.at(-1)
+    resolveElevation(1200)
+    await Promise.resolve()
+    expect(engine.profiles.at(-1)).toBe(applied)
+    now = (session.snapshot.plan!.lengthSec + 1) * 1000
+    session.tick()
+    expect(session.snapshot.profile?.material).toBe('stone')
+    expect(engine.profiles.at(-1)?.material).toBe('stone')
+    session.dispose()
+  })
+
+  it('keeps only the last of two quick place changes', async () => {
+    const { deps, engine } = makeDeps()
+    const session = new Session(deps)
+    await Promise.all([session.selectPlace(place), session.selectPlace(otherPlace)])
+    expect(session.snapshot.place).toEqual(otherPlace)
+    expect(engine.profiles.at(-1)?.seed).toBe(placeProfile(59.91, 10.75).seed)
+    session.dispose()
+  })
+
+  it('fires the bell once at the end of break and thunder only on code 95 and above', async () => {
+    let now = 0
+    const { deps, engine } = makeDeps({ now: () => now })
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    const bell = bellAt(session.snapshot.plan!)
+    now = (bell + 0.5) * 1000
+    session.tick()
+    expect(engine.events.some((e) => (e as { type: string }).type === 'bell')).toBe(true)
+    session.tick()
+    expect(engine.events.filter((e) => (e as { type: string }).type === 'bell')).toHaveLength(1)
+    session.dispose()
+  })
+
+  it('returns the piece seed that was active when the recording started', async () => {
+    const { deps } = makeDeps()
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+    await session.startRecording()
+    const seed = session.snapshot.pieceSeed
+    await session.selectPlace(otherPlace)
+    const result = session.stopRecording()
+    expect(result?.pieceSeed).toBe(seed)
+    expect(session.snapshot.pieceSeed).not.toBe(seed)
     session.dispose()
   })
 })

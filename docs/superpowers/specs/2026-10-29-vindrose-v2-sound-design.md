@@ -191,8 +191,9 @@ function stormScore(reading: WeatherReading | null): number // 0 to 1
 - **Piece length.** Drawn from the seed in 8 to 10 minutes. The recording
   cap is 10, so one piece fits one take and a take can hold the start of
   the next one.
-- **Grammar.** Nine minutes and above is five sections: emerge, build,
-  expose, break, return. Below nine is four: emerge, middle, break, return.
+- **Grammar.** Eight and a half minutes and above is five sections:
+  emerge, build, expose, break, return. Below that is four: emerge, middle,
+  break, return.
   Weather decides the four-section middle: a storm score above 0.6 gives
   build, below 0.2 gives emerge, otherwise expose. A five-section piece
   takes its shape from the length, and the score only weights its layers.

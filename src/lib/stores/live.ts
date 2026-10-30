@@ -1,9 +1,10 @@
 import type { AudioEvent } from '../domain/events'
 import type { ChannelTargets } from '../domain/mapping'
+import type { PlaceProfile } from '../domain/place'
 import { AudioEngine, type ChannelId } from '../audio/engine'
 import { defaultTimbre, type TimbreName } from '../audio/timbres'
 import { Recorder } from '../audio/recorder'
-import { fetchWeather } from '../weather/openMeteo'
+import { fetchElevation, fetchWeather } from '../weather/openMeteo'
 import { loadLastPlace, loadMix, saveLastPlace, saveMix } from './persistence'
 import { Session, type EngineLike } from './session'
 
@@ -12,6 +13,9 @@ class DeferredEngine implements EngineLike {
   private readonly timbres = new Map<ChannelId, TimbreName>()
   private readonly built: () => AudioEngine
   private target: { targets: ChannelTargets; tau: number } | null = null
+  private profile: { profile: PlaceProfile; seconds: number } | null = null
+  private tempo: number | null = null
+  private barHandler: ((time: number, bar: number) => void) | null = null
   private frozen = false
   private master = 0.8
   private mutedAll = false
@@ -27,11 +31,20 @@ class DeferredEngine implements EngineLike {
       for (const [id, state] of this.mix) {
         this.engine.setMix(id, state.gain, state.muted)
       }
+      if (this.profile) {
+        this.engine.setProfile(this.profile.profile, this.profile.seconds)
+      }
+      if (this.tempo !== null) {
+        this.engine.setTempo(this.tempo)
+      }
       for (const [id, name] of this.timbres) {
         this.engine.setTimbre(id, name)
       }
       if (this.target) {
         this.engine.applyTargets(this.target.targets, this.target.tau)
+      }
+      if (this.barHandler) {
+        this.engine.setBarHandler(this.barHandler)
       }
       this.engine.setFrozen(this.frozen)
       this.engine.setMaster(this.master)
@@ -68,6 +81,21 @@ class DeferredEngine implements EngineLike {
   setMix(channel: ChannelId, gain: number, muted: boolean): void {
     this.mix.set(channel, { gain, muted })
     this.engine?.setMix(channel, gain, muted)
+  }
+
+  setProfile(profile: PlaceProfile, seconds = 0): void {
+    this.profile = { profile, seconds }
+    this.engine?.setProfile(profile, seconds)
+  }
+
+  setTempo(bpm: number): void {
+    this.tempo = bpm
+    this.engine?.setTempo(bpm)
+  }
+
+  setBarHandler(handler: (time: number, bar: number) => void): void {
+    this.barHandler = handler
+    this.engine?.setBarHandler(handler)
   }
 
   setTimbre(channel: ChannelId, name: TimbreName): void {
@@ -108,6 +136,7 @@ export function getSession(): Session {
   instance = new Session({
     engine,
     weather: (lat, lon) => fetchWeather(lat, lon),
+    elevation: (lat, lon) => fetchElevation(lat, lon),
     createRecorder: async () => {
       const ctx = engine.context
       const tap = engine.tap

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Section } from '../domain/director'
   import type { WeatherReading } from '../domain/types'
   import type { Place } from '../weather/photon'
 
@@ -6,9 +7,10 @@
     place: Place | null
     reading: WeatherReading | null
     stale: boolean
+    section: Section | null
   }
 
-  let { place, reading, stale }: Props = $props()
+  let { place, reading, stale, section }: Props = $props()
 
   function conditionOf(code: number): string {
     if (code === 0) return 'clear'
@@ -45,6 +47,7 @@
   <div class="identity">
     <div class="name">{place?.name ?? 'Search a place'}</div>
     <div class="meta">
+      {#if section}<span class="section">{section.toUpperCase()}</span>{/if}
       {#if place}<span class="coords">{coordsOf(place)}</span>{/if}
       {#if stale && reading}
         <span class="stale">stale · last updated {updated}</span>
@@ -92,6 +95,7 @@
     margin-top: 3px;
   }
 
+  .section,
   .coords,
   .stale {
     font-family: var(--font-mono);
@@ -99,6 +103,11 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--forest-muted);
+  }
+
+  .section {
+    letter-spacing: 0.14em;
+    color: var(--forest);
   }
 
   .stale {
