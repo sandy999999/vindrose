@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { WindChannel } from '../src/lib/audio/channels/wind'
 import { RainChannel } from '../src/lib/audio/channels/rain'
+import { GustChannel } from '../src/lib/audio/channels/gust'
 import { PressureChannel } from '../src/lib/audio/channels/pressure'
 import { ThunderChannel } from '../src/lib/audio/channels/thunder'
 import { PadChannel } from '../src/lib/audio/channels/pad'
@@ -31,6 +32,17 @@ describe('RainChannel', () => {
     const freqs = fake.created.biquads.map((f) => f.frequency.value)
     expect(freqs.slice(0, 4)).toEqual([1000, 2760, 5400, 8930])
     expect(fake.created.biquads.slice(0, 4).every((f) => f.Q.value === 40)).toBe(true)
+  })
+})
+
+describe('GustChannel', () => {
+  it('follows the masked level of its strip', () => {
+    const fake = new FakeAudioContext()
+    const gust = new GustChannel(asCtx(fake))
+    gust.update({ level: 0.6 }, 0)
+    expect(gust.output.gain.value).toBeCloseTo(0.6)
+    gust.update({ level: 0 }, 0)
+    expect(gust.output.gain.value).toBe(0)
   })
 })
 
@@ -80,5 +92,26 @@ describe('MotifChannel', () => {
     expect(notes.length).toBeGreaterThanOrEqual(2)
     expect(notes.length).toBeLessThanOrEqual(5)
     expect(notes[0]?.startedAt).toBe(10)
+  })
+
+  it('keeps its phrase clock when the scheduler restarts its bars', () => {
+    const fake = new FakeAudioContext()
+    const motif = new MotifChannel(asCtx(fake))
+    motif.setProfile(placeProfile(58, 11))
+    for (let bar = 0; bar < 4; bar += 1) motif.onBar(bar, bar)
+    const afterPhrase = fake.created.oscs.length
+    expect(afterPhrase).toBeGreaterThanOrEqual(2)
+
+    motif.onBar(4, 0) // a resumed scheduler reports bar 0 again
+    expect(fake.created.oscs.length).toBe(afterPhrase)
+  })
+
+  it('begins a fresh voice set at the first phrase, whatever bar it is told', () => {
+    const fake = new FakeAudioContext()
+    const motif = new MotifChannel(asCtx(fake))
+    motif.setProfile(placeProfile(58, 11))
+
+    motif.onBar(10, 300)
+    expect(fake.created.oscs.length).toBeGreaterThanOrEqual(2)
   })
 })

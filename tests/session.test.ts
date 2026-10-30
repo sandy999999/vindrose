@@ -340,19 +340,23 @@ describe('Session', () => {
     session.dispose()
   })
 
-  it('opens a v1 mix without a crash and keeps the gains it still has', () => {
+  it('opens a v1 mix and carries the pad and motif gains over', () => {
     const v1 = {
-      gain: { wind: 0.4, humidity: 0.7 },
+      gain: { wind: 0.4, humidity: 0.7, temperature: 0.5 },
       muted: { humidity: true },
-      timbre: { humidity: 'choir' },
+      timbre: { humidity: 'choir', temperature: 'bell' },
     }
-    const { deps } = makeDeps({ loadMix: () => v1 as unknown as Mix })
+    const { deps, engine } = makeDeps({ loadMix: () => v1 as unknown as Mix })
     const session = new Session(deps)
 
     expect(session.snapshot.channelGain.wind).toBe(0.4)
-    expect(session.snapshot.channelGain.pad).toBe(1)
-    expect(session.snapshot.channelGain.motif).toBe(1)
-    expect(session.snapshot.channelMuted.pad).toBe(false)
+    expect(session.snapshot.channelGain.pad).toBe(0.7)
+    expect(session.snapshot.channelGain.motif).toBe(0.5)
+    expect(session.snapshot.channelMuted.pad).toBe(true)
+    expect(session.snapshot.channelMuted.motif).toBe(false)
+    expect(session.snapshot.timbre.pad).toBe('choir')
+    expect(session.snapshot.timbre.motif).toBe('bell')
+    expect(engine.mixes).toContainEqual({ id: 'pad', gain: 0.7, muted: true })
 
     session.dispose()
   })

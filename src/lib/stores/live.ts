@@ -4,7 +4,7 @@ import type { PlaceProfile } from '../domain/place'
 import { AudioEngine, type ChannelId } from '../audio/engine'
 import { defaultTimbre, type TimbreName } from '../audio/timbres'
 import { Recorder } from '../audio/recorder'
-import { fetchWeather } from '../weather/openMeteo'
+import { fetchElevation, fetchWeather } from '../weather/openMeteo'
 import { loadLastPlace, loadMix, saveLastPlace, saveMix } from './persistence'
 import { Session, type EngineLike } from './session'
 
@@ -136,6 +136,7 @@ export function getSession(): Session {
   instance = new Session({
     engine,
     weather: (lat, lon) => fetchWeather(lat, lon),
+    elevation: (lat, lon) => fetchElevation(lat, lon),
     createRecorder: async () => {
       const ctx = engine.context
       const tap = engine.tap

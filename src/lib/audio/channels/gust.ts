@@ -19,7 +19,7 @@ export class GustChannel implements InstrumentChannel {
 
   constructor(private readonly ctx: AudioContext) {
     this.output = ctx.createGain()
-    this.output.gain.value = 0.9
+    this.output.gain.value = 0
     this.noise = createNoiseBuffer(ctx, 1)
   }
 
@@ -35,8 +35,9 @@ export class GustChannel implements InstrumentChannel {
     }
   }
 
-  update(): void {
-    /* the gust cloud is event driven */
+  update(target: unknown, tau: number): void {
+    const gust = target as { level: number }
+    this.output.gain.setTargetAtTime(gust.level, this.ctx.currentTime, tau)
   }
 
   private burst(at: number, strength: number): void {

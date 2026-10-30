@@ -101,20 +101,30 @@ function channelMap<T>(value: T): Record<ChannelId, T> {
   return map
 }
 
+// v1 stored humidity and temperature; v2 turned those voices into pad and motif.
+const LEGACY_IDS: Partial<Record<ChannelId, string>> = { pad: 'humidity', motif: 'temperature' }
+
+function stored<T>(record: Record<string, T> | undefined, id: ChannelId): T | undefined {
+  const direct = record?.[id]
+  if (direct !== undefined) return direct
+  const legacy = LEGACY_IDS[id]
+  return legacy === undefined ? undefined : record?.[legacy]
+}
+
 function normalizeMix(mix: Mix | null): Mix {
   const gain = channelMap(1)
   const muted = channelMap(false)
   const timbre = defaultTimbres()
   if (mix) {
     for (const id of CHANNELS) {
-      const value = mix.gain?.[id]
+      const value = stored(mix.gain, id)
       if (typeof value === 'number' && Number.isFinite(value)) {
         gain[id] = clamp(value, 0, MAX_CHANNEL_GAIN)
       }
-      muted[id] = mix.muted?.[id] === true
+      muted[id] = stored(mix.muted, id) === true
     }
     for (const id of Object.keys(timbre) as ChannelId[]) {
-      const name = mix.timbre?.[id]
+      const name = stored(mix.timbre, id)
       if (typeof name === 'string' && isTimbre(id, name)) {
         timbre[id] = name
       }

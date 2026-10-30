@@ -40,6 +40,7 @@ export class MotifChannel implements InstrumentChannel {
   private tempo = 56
   private level = 1
   private register = DEFAULT_REGISTER
+  private pieceBar = 0
 
   constructor(
     private readonly ctx: AudioContext,
@@ -64,7 +65,11 @@ export class MotifChannel implements InstrumentChannel {
     void tau
   }
 
-  onBar(time: number, bar: number): void {
+  // The scheduler's bar counter restarts whenever the engine resumes, so the
+  // voice keeps its own piece bar: one per bar it is told about.
+  onBar(time: number, _bar: number): void {
+    const bar = this.pieceBar
+    this.pieceBar += 1
     if (bar % BARS_PER_PHRASE !== 0) return
     const shape = Math.floor(bar / BARS_PER_PHRASE) % 4
     const rand = mulberry32((this.seed + bar) >>> 0)
