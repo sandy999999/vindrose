@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { WindChannel } from '../src/lib/audio/channels/wind'
 import { RainChannel } from '../src/lib/audio/channels/rain'
 import { PressureChannel } from '../src/lib/audio/channels/pressure'
+import { ThunderChannel } from '../src/lib/audio/channels/thunder'
 import { FakeAudioContext, asCtx } from './fakeAudio'
 
 describe('WindChannel', () => {
@@ -37,5 +38,17 @@ describe('PressureChannel', () => {
     channel.update({ level: 0.35, targetHz: 80 }, 0)
     expect(fake.created.delays[0]!.delayTime.value).toBeCloseTo(1 / 80)
     expect(fake.created.gains[0]!.gain.value).toBeCloseTo(0.93)
+  })
+})
+
+describe('ThunderChannel', () => {
+  it('fires a low rumble with a bright crack', () => {
+    const fake = new FakeAudioContext()
+    const channel = new ThunderChannel(asCtx(fake))
+    channel.fire({ type: 'thunder-crack', strength: 0.8 })
+    const freqs = fake.created.biquads.map((f) => f.frequency.value)
+    expect(freqs.some((f) => f >= 60 && f <= 180)).toBe(true)
+    expect(freqs.some((f) => f > 1000)).toBe(true)
+    expect(fake.created.sources.length).toBeGreaterThanOrEqual(2)
   })
 })

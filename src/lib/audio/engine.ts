@@ -8,8 +8,8 @@ import { RainChannel } from './channels/rain'
 import { PressureChannel } from './channels/pressure'
 import { HumidityChannel } from './channels/humidity'
 import { TemperatureChannel } from './channels/temperature'
+import { ThunderChannel } from './channels/thunder'
 import { TimbreChannel } from './channels/timbre'
-import { SilentChannel } from './channels/silent'
 import { defaultTimbre, type TimbreName } from './timbres'
 import { createReverb } from './reverb'
 
@@ -366,7 +366,7 @@ export class AudioEngine {
       case 'pressure':
         return new PressureChannel(this.ctx)
       case 'thunder':
-        return new SilentChannel(this.ctx)
+        return new ThunderChannel(this.ctx)
       case 'pad':
         return new HumidityChannel(this.ctx, name)
       case 'motif':
