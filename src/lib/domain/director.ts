@@ -1,3 +1,4 @@
+import { fnv1a } from './random'
 import type { WeatherReading } from './types'
 
 export type Section = 'emerge' | 'build' | 'expose' | 'break' | 'return'
@@ -96,5 +97,77 @@ export function planFor(seed: number, reading: WeatherReading | null): Plan {
     startSec = endSec
   }
 
-  return { pieceSeed: seed, lengthSec, solo: 'wind', sections }
+  return { pieceSeed: seed, lengthSec, solo: soloVoice(reading), sections }
+}
+
+export type LayerMask = Record<LayerId, number>
+
+const ZERO_MASK: LayerMask = {
+  wind: 0, rain: 0, gust: 0, pressure: 0, thunder: 0, pad: 0, motif: 0,
+}
+
+const MASKS: Record<Exclude<Section, 'expose'>, LayerMask> = {
+  emerge: { wind: 1, rain: 0.6, gust: 0.4, pressure: 0.8, thunder: 0, pad: 0.5, motif: 0 },
+  build: { wind: 1, rain: 1, gust: 1, pressure: 1, thunder: 1, pad: 1, motif: 0.6 },
+  break: { ...ZERO_MASK, wind: 0.2, pad: 0.15 },
+  return: { wind: 0.8, rain: 0.8, gust: 0.5, pressure: 0.6, thunder: 0, pad: 0.7, motif: 0.4 },
+}
+
+export function soloVoice(reading: WeatherReading | null): LayerId {
+  if (reading === null) return 'wind'
+  const candidates: [LayerId, number][] = [
+    ['wind', reading.windSpeed / 20],
+    ['gust', reading.windGust / 25],
+    ['rain', reading.precipitation / 8],
+    ['pressure', Math.abs(reading.pressure - 1013) / 20],
+    ['thunder', reading.weatherCode >= 95 ? 1 : 0],
+  ]
+  let best: LayerId = 'wind'
+  let bestScore = 0
+  for (const [id, score] of candidates) {
+    if (score > bestScore) {
+      best = id
+      bestScore = score
+    }
+  }
+  return best
+}
+
+export function layerMask(kind: Section, solo: LayerId): LayerMask {
+  if (kind !== 'expose') return { ...MASKS[kind] }
+  const mask: LayerMask = { ...ZERO_MASK }
+  mask[solo] = 1
+  mask.motif = 0.3
+  return mask
+}
+
+export function maskAt(plan: Plan, elapsedSec: number): LayerMask {
+  const section = plan.sections.find(
+    (span) => elapsedSec >= span.startSec && elapsedSec < span.endSec,
+  )
+  if (section === undefined) return { ...ZERO_MASK }
+  const mask = layerMask(section.kind, plan.solo)
+  if (section.kind === 'break' && section.endSec - elapsedSec < 6) {
+    return { ...mask, pad: 0 }
+  }
+  return mask
+}
+
+export function bellAt(plan: Plan): number {
+  const span = plan.sections.find((section) => section.kind === 'break')
+  return span === undefined ? plan.lengthSec : span.endSec - 2
+}
+
+export function thunderSlots(plan: Plan, reading: WeatherReading | null): number[] {
+  if (reading === null || reading.weatherCode < 95) return []
+  const slots: number[] = []
+  for (const section of plan.sections) {
+    if (section.kind !== 'build' && section.kind !== 'expose') continue
+    for (let t = section.startSec + 12; t < section.endSec - 5; t += 90) slots.push(t)
+  }
+  return slots
+}
+
+export function nextSeed(seed: number, pieceIndex: number): number {
+  return fnv1a(`${seed}:${pieceIndex}`)
 }

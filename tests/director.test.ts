@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { planFor, pieceLength, stormScore } from '../src/lib/domain/director'
+import {
+  bellAt, layerMask, maskAt, nextSeed, planFor, pieceLength, soloVoice, stormScore, thunderSlots,
+} from '../src/lib/domain/director'
+import { fnv1a } from '../src/lib/domain/random'
 import type { WeatherReading } from '../src/lib/domain/types'
 
 const calm: WeatherReading = {
@@ -84,5 +87,57 @@ describe('planFor', () => {
     expect(planFor(seed, calm).sections[1]?.kind).toBe('emerge')
     const neutral = planFor(seed, null).sections[1]?.kind
     expect(neutral).toBe('expose')
+  })
+})
+
+describe('masks and rare events', () => {
+  it('picks a solo voice by the strongest normalised parameter', () => {
+    expect(soloVoice(storm)).toBe('pressure')
+    expect(soloVoice({ ...storm, pressure: 1013 })).toBe('gust')
+    expect(soloVoice({ ...calm, windSpeed: 18, windGust: 20, precipitation: 0 })).toBe('wind')
+    expect(soloVoice({ ...calm, precipitation: 9 })).toBe('rain')
+    expect(soloVoice(null)).toBe('wind')
+  })
+
+  it('silences every other layer in expose', () => {
+    const mask = layerMask('expose', 'rain')
+    expect(mask.rain).toBe(1)
+    expect(mask.pad).toBe(0)
+    expect(mask.motif).toBeLessThanOrEqual(0.3)
+  })
+
+  it('leaves only wind in break and in its last six seconds', () => {
+    const plan = planFor(2, calm)
+    const span = plan.sections.find((s) => s.kind === 'break')!
+    const early = maskAt(plan, span.startSec + 1)
+    const end = maskAt(plan, span.endSec - 3)
+    expect(end.wind).toBeGreaterThan(0)
+    expect(Object.entries(end).filter(([id, v]) => id !== 'wind' && v > 0)).toEqual([])
+    expect(early.pad).toBeGreaterThan(0)
+  })
+
+  it('puts the bell two seconds before break ends', () => {
+    const plan = planFor(2, calm)
+    const span = plan.sections.find((s) => s.kind === 'break')!
+    expect(bellAt(plan)).toBe(span.endSec - 2)
+  })
+
+  it('puts thunder only in build or expose, at most every 90 seconds', () => {
+    const plan = planFor(3, storm)
+    const slots = thunderSlots(plan, { ...storm, weatherCode: 96 })
+    expect(slots.length).toBeGreaterThanOrEqual(1)
+    for (const t of slots) {
+      const section = plan.sections.find((s) => t >= s.startSec && t < s.endSec)
+      expect(['build', 'expose']).toContain(section?.kind)
+    }
+    for (let i = 1; i < slots.length; i += 1) {
+      expect(slots[i]! - slots[i - 1]!).toBeGreaterThanOrEqual(90)
+    }
+    expect(thunderSlots(plan, calm)).toEqual([])
+  })
+
+  it('chains the next seed deterministically from the first', () => {
+    expect(nextSeed(42, 1)).toBe(fnv1a('42:1'))
+    expect(nextSeed(42, 2)).toBe(fnv1a('42:2'))
   })
 })
