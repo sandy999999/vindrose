@@ -32,10 +32,14 @@ const FULL_MASK: LayerMask = {
   wind: 1, rain: 1, gust: 1, pressure: 1, thunder: 1, pad: 1, motif: 1,
 }
 
+export type SoundMode = 'weather' | 'music'
+export const DEFAULT_SOUND_MODE: SoundMode = 'music'
+
 export interface Mix {
   gain: Record<ChannelId, number>
   muted: Record<ChannelId, boolean>
   timbre: Partial<Record<ChannelId, TimbreName>>
+  soundMode?: SoundMode
 }
 
 export interface EngineLike {
@@ -91,6 +95,7 @@ export interface SessionState {
   pieceSeed: number
   plan: Plan | null
   levels: Record<ChannelId, number>
+  soundMode: SoundMode
 }
 
 function channelMap<T>(value: T): Record<ChannelId, T> {
@@ -111,10 +116,11 @@ function stored<T>(record: Record<string, T> | undefined, id: ChannelId): T | un
   return legacy === undefined ? undefined : record?.[legacy]
 }
 
-function normalizeMix(mix: Mix | null): Mix {
+function normalizeMix(mix: Mix | null): Mix & { soundMode: SoundMode } {
   const gain = channelMap(1)
   const muted = channelMap(false)
   const timbre = defaultTimbres()
+  let soundMode = DEFAULT_SOUND_MODE
   if (mix) {
     for (const id of CHANNELS) {
       const value = stored(mix.gain, id)
@@ -129,8 +135,11 @@ function normalizeMix(mix: Mix | null): Mix {
         timbre[id] = name
       }
     }
+    if (mix.soundMode === 'weather' || mix.soundMode === 'music') {
+      soundMode = mix.soundMode
+    }
   }
-  return { gain, muted, timbre }
+  return { gain, muted, timbre, soundMode }
 }
 
 function applyMask(targets: ChannelTargets, mask: LayerMask): ChannelTargets {
@@ -143,6 +152,17 @@ function applyMask(targets: ChannelTargets, mask: LayerMask): ChannelTargets {
     thunder: { ...targets.thunder, level: targets.thunder.level * mask.thunder },
     pad: { ...targets.pad, level: targets.pad.level * mask.pad },
     motif: { ...targets.motif, level: targets.motif.level * mask.motif },
+  }
+}
+
+// The listening mode silences the musical voices at the mask, so the faders
+// stay where the listener left them.
+function applyMode(targets: ChannelTargets, mode: SoundMode): ChannelTargets {
+  if (mode === 'music') return targets
+  return {
+    ...targets,
+    pad: { ...targets.pad, level: 0 },
+    motif: { ...targets.motif, level: 0 },
   }
 }
 
@@ -203,6 +223,7 @@ export class Session {
       pieceSeed: 0,
       plan: null,
       levels: channelMap(0),
+      soundMode: mix.soundMode,
     }
     for (const id of CHANNELS) {
       deps.engine.setMix(id, mix.gain[id], mix.muted[id])
@@ -286,7 +307,7 @@ export class Session {
     }
 
     const mask = this.piece === null ? FULL_MASK : maskAt(this.piece, elapsed)
-    const targets = applyMask(mapWeather(reading, profile, elapsed), mask)
+    const targets = applyMode(applyMask(mapWeather(reading, profile, elapsed), mask), this.state.soundMode)
     this.deps.engine.applyTargets(targets, tau)
     this.set({ levels: levelsOf(targets) })
 
@@ -342,6 +363,13 @@ export class Session {
     this.set({ channelGain: { ...this.state.channelGain, [id]: gain } })
     this.deps.engine.setMix(id, gain, this.state.channelMuted[id])
     this.persistMix()
+  }
+
+  setSoundMode(mode: SoundMode): void {
+    if (this.state.soundMode === mode) return
+    this.set({ soundMode: mode })
+    this.persistMix()
+    this.tick()
   }
 
   toggleMute(id: ChannelId): void {
@@ -499,6 +527,7 @@ export class Session {
       gain: this.state.channelGain,
       muted: this.state.channelMuted,
       timbre: this.state.timbre,
+      soundMode: this.state.soundMode,
     })
   }
 

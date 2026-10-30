@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { SoundMode } from '../stores/session'
+
   interface Props {
     playing: boolean
     recording: boolean
@@ -6,12 +8,14 @@
     master: number
     frozen: boolean
     allMuted: boolean
+    soundMode: SoundMode
     onPlay: () => void
     onPause: () => void
     onRecord: () => void
     onMaster: (value: number) => void
     onToggleMuteAll: () => void
     onToggleFreeze: () => void
+    onSoundMode: (mode: SoundMode) => void
   }
 
   let {
@@ -21,12 +25,14 @@
     master,
     frozen,
     allMuted,
+    soundMode,
     onPlay,
     onPause,
     onRecord,
     onMaster,
     onToggleMuteAll,
     onToggleFreeze,
+    onSoundMode,
   }: Props = $props()
 
   function clock(seconds: number): string {
@@ -93,6 +99,27 @@
       onclick={onToggleFreeze}
     >
       freeze
+    </button>
+  </div>
+
+  <div class="mode" role="group" aria-label="Listening mode">
+    <button
+      type="button"
+      class:on={soundMode === 'weather'}
+      aria-pressed={soundMode === 'weather'}
+      title="Hear only the weather; the pad and motif stay silent"
+      onclick={() => onSoundMode('weather')}
+    >
+      Weather only
+    </button>
+    <button
+      type="button"
+      class:on={soundMode === 'music'}
+      aria-pressed={soundMode === 'music'}
+      title="Hear the weather with the pad and motif"
+      onclick={() => onSoundMode('music')}
+    >
+      Weather + music
     </button>
   </div>
 
@@ -197,6 +224,36 @@
 
   .toggle.on {
     border-color: var(--forest);
+    background: var(--forest);
+    color: var(--cream-bright);
+  }
+
+  .mode {
+    display: flex;
+    align-self: flex-start;
+    border: 1px solid var(--sand-dark);
+    border-radius: 999px;
+    background: var(--cream-bright);
+    overflow: hidden;
+  }
+
+  .mode button {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 0;
+    background: transparent;
+    color: var(--forest-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+  }
+
+  .mode button + button {
+    border-left: 1px solid var(--sand-dark);
+  }
+
+  .mode button.on {
     background: var(--forest);
     color: var(--cream-bright);
   }
