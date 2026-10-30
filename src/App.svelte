@@ -12,7 +12,6 @@
   import type { ChannelId } from './lib/audio/engine'
   import { TIMBRES } from './lib/audio/timbres'
   import { recordAlert } from './lib/audio/recorder'
-  import { mapWeather } from './lib/domain/mapping'
   import { getSession } from './lib/stores/live'
   import { latestResult } from './lib/weather/latest'
   import type { SessionState } from './lib/stores/session'
@@ -34,18 +33,6 @@
     { id: 'motif', label: 'MOT' },
   ]
 
-  const targets = $derived(
-    view.reading && view.profile ? mapWeather(view.reading, view.profile, 0) : null,
-  )
-  const levels: Record<ChannelId, number> = $derived({
-    wind: targets?.wind.level ?? 0,
-    rain: targets?.rain.level ?? 0,
-    gust: targets?.gust.level ?? 0,
-    pressure: targets?.pressure.level ?? 0,
-    thunder: targets?.thunder.level ?? 0,
-    pad: targets?.pad.level ?? 0,
-    motif: targets?.motif.level ?? 0,
-  })
   const allMuted = $derived(view.mutedAll)
   const reverse = latestResult<Place | null>()
   let warned = false
@@ -209,7 +196,12 @@
 
   <BottomSheet>
     {#snippet header()}
-      <WeatherHeader place={view.place} reading={view.reading} stale={view.stale} />
+      <WeatherHeader
+        place={view.place}
+        reading={view.reading}
+        stale={view.stale}
+        section={view.section}
+      />
       <ParameterChips reading={view.reading} />
     {/snippet}
 
@@ -219,7 +211,7 @@
           <ChannelStrip
             id={strip.id}
             label={strip.label}
-            value={levels[strip.id]}
+            value={view.levels[strip.id]}
             gain={view.channelGain[strip.id]}
             muted={view.channelMuted[strip.id]}
             timbre={view.timbre[strip.id]}
