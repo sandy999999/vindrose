@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AudioEngine, CHANNELS, eventTarget } from '../src/lib/audio/engine'
-import { FakeAudioContext } from './fakeAudio'
+import { FakeAudioContext, asCtx } from './fakeAudio'
+import { placeProfile } from '../src/lib/domain/place'
+import type { ChannelTargets } from '../src/lib/domain/mapping'
 
 function makeEngine() {
   const ctx = new FakeAudioContext()
@@ -78,5 +80,43 @@ describe('AudioEngine channels', () => {
     expect(eventTarget({ type: 'temperature-note', note: 60 })).toBe('motif')
     expect(eventTarget({ type: 'thunder-crack', strength: 1 })).toBe('thunder')
     expect(eventTarget({ type: 'bell' })).toBe('pad')
+  })
+})
+
+const sampleTargets: ChannelTargets = {
+  wind: { level: 0, freq: 100, q: 8, pan: 0, breath: 1 },
+  rain: { level: 0, density: 0, basePitch: 220 },
+  gust: { level: 0 },
+  pressure: { level: 0.35, targetHz: 55 },
+  thunder: { level: 0 },
+  pad: { level: 0, cutoff: 300, degree: 0 },
+  motif: { level: 0, register: 50 },
+  reverb: { wet: 0.15, preDelay: 0.01 },
+}
+
+describe('AudioEngine place transition', () => {
+  it('crossfades to a new voice set over four seconds', () => {
+    vi.useFakeTimers()
+    const fake = new FakeAudioContext()
+    const engine = new AudioEngine(asCtx(fake))
+    const before = engine.channelCount
+    engine.setProfile(placeProfile(59.9, 10.7), 4)
+    expect(engine.channelCount).toBe(before * 2)
+    const ramps = fake.created.gains.flatMap((g) => g.gain.calls)
+    expect(ramps.some((c) => c.method === 'linearRamp' && c.value === 1 && c.time === 4)).toBe(true)
+    vi.advanceTimersByTime(4200)
+    expect(engine.channelCount).toBe(before)
+    vi.useRealTimers()
+  })
+
+  it('sends targets to the new set after the switch', () => {
+    vi.useFakeTimers()
+    const fake = new FakeAudioContext()
+    const engine = new AudioEngine(asCtx(fake))
+    engine.setProfile(placeProfile(59.9, 10.7), 4)
+    vi.advanceTimersByTime(4200)
+    engine.applyTargets(sampleTargets, 0)
+    expect(engine.activeBusLevel).toBe(1)
+    vi.useRealTimers()
   })
 })

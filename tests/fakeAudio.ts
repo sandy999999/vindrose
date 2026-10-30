@@ -95,9 +95,10 @@ class FakeOscillator extends FakeNode {
   readonly frequency = new FakeParam(440)
   readonly detune = new FakeParam(0)
   onended: (() => void) | null = null
+  startedAt: number | null = null
 
-  start(): void {
-    /* the fake runs no clock */
+  start(when = 0): void {
+    this.startedAt = when
   }
 
   stop(): void {
@@ -122,6 +123,14 @@ export class FakeAudioContext {
   currentTime = 0
   state: AudioContextState = 'suspended'
   readonly destination = new FakeNode()
+  readonly created = {
+    gains: [] as FakeGain[],
+    biquads: [] as FakeBiquad[],
+    delays: [] as FakeDelay[],
+    oscs: [] as FakeOscillator[],
+    sources: [] as FakeSource[],
+    panners: [] as FakePanner[],
+  }
   suspensions = 0
   resumptions = 0
 
@@ -136,7 +145,9 @@ export class FakeAudioContext {
   }
 
   createGain(): FakeGain {
-    return new FakeGain()
+    const node = new FakeGain()
+    this.created.gains.push(node)
+    return node
   }
 
   createDynamicsCompressor(): FakeCompressor {
@@ -144,7 +155,9 @@ export class FakeAudioContext {
   }
 
   createDelay(): FakeDelay {
-    return new FakeDelay()
+    const node = new FakeDelay()
+    this.created.delays.push(node)
+    return node
   }
 
   createConvolver(): FakeConvolver {
@@ -152,22 +165,34 @@ export class FakeAudioContext {
   }
 
   createBiquadFilter(): FakeBiquad {
-    return new FakeBiquad()
+    const node = new FakeBiquad()
+    this.created.biquads.push(node)
+    return node
   }
 
   createStereoPanner(): FakePanner {
-    return new FakePanner()
+    const node = new FakePanner()
+    this.created.panners.push(node)
+    return node
   }
 
   createBufferSource(): FakeSource {
-    return new FakeSource()
+    const node = new FakeSource()
+    this.created.sources.push(node)
+    return node
   }
 
   createOscillator(): FakeOscillator {
-    return new FakeOscillator()
+    const node = new FakeOscillator()
+    this.created.oscs.push(node)
+    return node
   }
 
   createBuffer(channels: number, length: number, sampleRate: number): FakeBuffer {
     return new FakeBuffer(channels, length, sampleRate)
   }
+}
+
+export function asCtx(fake: FakeAudioContext): AudioContext {
+  return fake as unknown as AudioContext
 }
