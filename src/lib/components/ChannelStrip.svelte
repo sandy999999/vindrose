@@ -160,7 +160,7 @@
     <span class="timbre-slot" aria-hidden="true"></span>
   {/if}
 
-  <span class="label">{label}</span>
+  <span class="label" data-full={NAMES[id]}>{label}</span>
 </div>
 
 {#if menuOpen && timbreOptions}
@@ -314,10 +314,44 @@
   }
 
   .label {
+    position: relative;
+    padding: 4px 6px;
+    margin: -4px -6px;
     font-family: var(--font-mono);
     font-size: 9px;
     letter-spacing: 0.1em;
     color: var(--forest-muted);
+  }
+
+  .label::after {
+    content: attr(data-full);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    padding: 4px 8px;
+    border-radius: 7px;
+    background: var(--forest);
+    color: var(--parchment);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translate(-50%, 4px);
+    pointer-events: none;
+    transition:
+      opacity 180ms ease,
+      transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .label:hover::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .label::after {
+      transition: none;
+    }
   }
 
   .menu-layer {

@@ -361,6 +361,55 @@ describe('Session', () => {
     session.dispose()
   })
 
+  it('keeps the music silent in weather-only mode without touching the faders', async () => {
+    const { deps } = makeDeps()
+    const session = new Session(deps)
+    await session.selectPlace(place)
+    await session.play()
+
+    session.setSoundMode('weather')
+    session.tick()
+    expect(session.snapshot.levels.pad).toBe(0)
+    expect(session.snapshot.levels.motif).toBe(0)
+    expect(session.snapshot.levels.wind).toBeGreaterThan(0)
+    expect(session.snapshot.channelGain.pad).toBe(1)
+
+    session.setSoundMode('music')
+    session.tick()
+    expect(session.snapshot.levels.pad).toBeGreaterThan(0)
+
+    session.dispose()
+  })
+
+  it('starts in the music mode and restores a stored weather-only choice', () => {
+    const first = new Session(makeDeps().deps)
+    expect(first.snapshot.soundMode).toBe('music')
+
+    const { deps } = makeDeps({
+      loadMix: () => ({
+        gain: channelGains(1),
+        muted: channelMutes(false),
+        timbre: {},
+        soundMode: 'weather',
+      }),
+    })
+    const restored = new Session(deps)
+    expect(restored.snapshot.soundMode).toBe('weather')
+
+    first.dispose()
+    restored.dispose()
+  })
+
+  it('persists the listening mode with the mix', () => {
+    const { deps, saveMix } = makeDeps()
+    const session = new Session(deps)
+
+    session.setSoundMode('weather')
+    expect(saveMix).toHaveBeenLastCalledWith(expect.objectContaining({ soundMode: 'weather' }))
+
+    session.dispose()
+  })
+
   it('freezes the piece clock while paused and continues the same plan', async () => {
     let now = 0
     const { deps } = makeDeps({ now: () => now })

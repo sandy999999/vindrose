@@ -41,6 +41,9 @@ const PAUSE_SETTLE_MS = 150
 const PAUSE_FADE = 0.015
 const DIP_SECONDS = 0.15
 const TRANSITION_SETTLE_MS = 200
+const AIR_SHELF_HZ = 4000
+
+const WEATHER: readonly ChannelId[] = ['wind', 'rain', 'gust', 'pressure', 'thunder']
 
 interface MixState {
   gain: number
@@ -49,6 +52,7 @@ interface MixState {
 
 interface VoiceSet {
   bus: GainNode
+  air: BiquadFilterNode
   channels: Map<ChannelId, InstrumentChannel>
   mixGains: Map<ChannelId, GainNode>
   timbreChannels: Map<ChannelId, TimbreChannel>
@@ -252,6 +256,7 @@ export class AudioEngine {
     channels.get('thunder')?.update(targets.thunder, tau)
     channels.get('pad')?.update(targets.pad, tau)
     channels.get('motif')?.update(targets.motif, tau)
+    this.active.air.gain.setTargetAtTime(targets.air.shelfDb, this.ctx.currentTime, tau)
     this.reverb?.setWet(targets.reverb.wet, targets.reverb.preDelay)
   }
 
@@ -306,9 +311,16 @@ export class AudioEngine {
   private createSet(): VoiceSet {
     const bus = this.ctx.createGain()
     if (this.reverbInput) bus.connect(this.reverbInput)
+    // Weather voices pass through the air; the music sits with the listener.
+    const air = this.ctx.createBiquadFilter()
+    air.type = 'highshelf'
+    air.frequency.value = AIR_SHELF_HZ
+    air.gain.value = 0
+    air.connect(bus)
     const channels = new Map<ChannelId, InstrumentChannel>()
     const mixGains = new Map<ChannelId, GainNode>()
     const timbreChannels = new Map<ChannelId, TimbreChannel>()
+    const weather = new Set<ChannelId>(WEATHER)
 
     for (const id of CHANNELS) {
       const channel = this.createChannel(id, timbreChannels)
@@ -316,12 +328,12 @@ export class AudioEngine {
       const mixGain = this.ctx.createGain()
       mixGain.gain.value = state.muted ? 0 : state.gain
       channel.output.connect(mixGain)
-      mixGain.connect(bus)
+      mixGain.connect(weather.has(id) ? air : bus)
       channels.set(id, channel)
       mixGains.set(id, mixGain)
     }
 
-    return { bus, channels, mixGains, timbreChannels }
+    return { bus, air, channels, mixGains, timbreChannels }
   }
 
   private disposeSet(set: VoiceSet | null): void {
@@ -332,6 +344,7 @@ export class AudioEngine {
     for (const gain of set.mixGains.values()) {
       gain.disconnect()
     }
+    set.air.disconnect()
     set.bus.disconnect()
     set.channels.clear()
     set.mixGains.clear()

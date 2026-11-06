@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mapWeather } from '../src/lib/domain/mapping'
 import { placeProfile } from '../src/lib/domain/place'
+import { speedRatio } from '../src/lib/domain/air'
 import type { WeatherReading } from '../src/lib/domain/types'
 
 const zeroReading: WeatherReading = {
@@ -42,6 +43,11 @@ describe('mapWeather', () => {
   it('maps rain density to full level at ten mm per hour', () => {
     expect(mapWeather(maxReading, profile, 0).rain.level).toBe(1)
     expect(mapWeather(zeroReading, profile, 0).rain.density).toBe(0)
+    expect(mapWeather(maxReading, profile, 0).rain.rate).toBe(10)
+  })
+
+  it('reports the hourly rain rate for the drop size model', () => {
+    expect(mapWeather({ ...calmReading, precipitation: 1.2 }, profile, 0).rain.rate).toBe(1.2)
   })
 
   it('maps a clear sky to the dry reverb and overcast to the wet one', () => {
@@ -63,9 +69,32 @@ describe('mapWeather', () => {
   it('derives the aeolian tone from speed and aperture', () => {
     const wide = { ...placeProfile(58.1, 11.3), aperture: 0.004 }
     const targets = mapWeather({ ...calmReading, windSpeed: 10 }, wide, 0)
-    expect(targets.wind.freq).toBeCloseTo((0.2 * 10) / 0.004)
+    expect(targets.wind.freq).toBeCloseTo(((0.2 * 10) / 0.004) * speedRatio(0))
     expect(targets.wind.q).toBeGreaterThanOrEqual(8)
     expect(targets.wind.q).toBeLessThanOrEqual(38)
+  })
+
+  it('lowers the aeolian tone as the air cools', () => {
+    const at = placeProfile(58.1, 11.3)
+    const cold = mapWeather({ ...calmReading, temperature: -10 }, at, 0).wind.freq
+    const warm = mapWeather({ ...calmReading, temperature: 30 }, at, 0).wind.freq
+    expect(cold).toBeLessThan(warm)
+    expect(warm / cold).toBeCloseTo(speedRatio(30) / speedRatio(-10), 4)
+  })
+
+  it('brightens the pad as the air warms', () => {
+    const at = placeProfile(58.1, 11.3)
+    const cold = mapWeather({ ...calmReading, temperature: -10 }, at, 0).pad.cutoff
+    const warm = mapWeather({ ...calmReading, temperature: 30 }, at, 0).pad.cutoff
+    expect(warm).toBeGreaterThan(cold * 1.5)
+  })
+
+  it('reports the high shelf loss over the listening path', () => {
+    const at = placeProfile(58.1, 11.3)
+    const cold = mapWeather({ ...calmReading, temperature: 0, humidity: 70 }, at, 0).air.shelfDb
+    const warm = mapWeather({ ...calmReading, temperature: 20, humidity: 70 }, at, 0).air.shelfDb
+    expect(cold).toBeLessThan(warm)
+    expect(warm).toBeLessThan(0)
   })
 
   it('clamps the aeolian tone to 80 to 2000 Hz', () => {

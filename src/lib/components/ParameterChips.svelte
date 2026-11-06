@@ -34,26 +34,39 @@
   const chips = $derived(
     reading
       ? [
-          { label: 'pressure', value: `${Math.round(reading.pressure)} hPa` },
-          { label: 'humidity', value: `${Math.round(reading.humidity)}%` },
-          { label: 'precip', value: `${reading.precipitation.toFixed(1)} mm` },
+          {
+            label: 'pressure',
+            full: 'mean sea level pressure',
+            value: `${Math.round(reading.pressure)} hPa`,
+          },
+          {
+            label: 'humidity',
+            full: 'relative humidity',
+            value: `${Math.round(reading.humidity)}%`,
+          },
+          {
+            label: 'precip',
+            full: 'precipitation',
+            value: `${reading.precipitation.toFixed(1)} mm/h`,
+          },
           {
             label: 'direction',
+            full: 'wind direction',
             value: `${compassOf(reading.windDirection)} ${Math.round(reading.windDirection)}°`,
           },
         ]
       : [
-          { label: 'pressure', value: '--' },
-          { label: 'humidity', value: '--' },
-          { label: 'precip', value: '--' },
-          { label: 'direction', value: '--' },
+          { label: 'pressure', full: 'mean sea level pressure', value: '--' },
+          { label: 'humidity', full: 'relative humidity', value: '--' },
+          { label: 'precip', full: 'precipitation', value: '--' },
+          { label: 'direction', full: 'wind direction', value: '--' },
         ],
   )
 </script>
 
 <dl class="chips">
   {#each chips as chip}
-    <div class="chip">
+    <div class="chip" data-full={chip.full}>
       <dt>{chip.label}</dt>
       <dd>{chip.value}</dd>
     </div>
@@ -69,10 +82,45 @@
   }
 
   .chip {
+    position: relative;
     padding: 8px 10px;
     border: 1px solid var(--sand-dark);
     border-radius: 10px;
     background: var(--cream);
+  }
+
+  .chip::after {
+    content: attr(data-full);
+    position: absolute;
+    left: -1px;
+    right: -1px;
+    bottom: calc(100% + 6px);
+    padding: 5px 8px;
+    border-radius: 7px;
+    background: var(--forest);
+    color: var(--parchment);
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 1.35;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    opacity: 0;
+    transform: translateY(4px);
+    pointer-events: none;
+    transition:
+      opacity 180ms ease,
+      transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .chip:hover::after {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chip::after {
+      transition: none;
+    }
   }
 
   dt {

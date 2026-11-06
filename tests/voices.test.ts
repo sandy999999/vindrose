@@ -22,6 +22,16 @@ describe('WindChannel', () => {
     expect(bed!.type).toBe('lowpass')
     expect(fake.created.panners[0]!.pan.value).toBeCloseTo(0.3)
   })
+
+  it('keeps the breath bed out of the direction pan', () => {
+    const fake = new FakeAudioContext()
+    const channel = new WindChannel(asCtx(fake))
+    channel.update({ level: 0.6, freq: 500, q: 20, pan: -0.7, breath: 0.4 }, 0)
+    const panner = fake.created.panners[0]!
+    const bed = fake.created.gains.find((gain) => gain.gain.value === 0.3)!
+    expect(bed.connections).not.toContain(panner)
+    expect(bed.connections).toContain(channel.output)
+  })
 })
 
 describe('RainChannel', () => {
@@ -32,6 +42,34 @@ describe('RainChannel', () => {
     const freqs = fake.created.biquads.map((f) => f.frequency.value)
     expect(freqs.slice(0, 4)).toEqual([1000, 2760, 5400, 8930])
     expect(fake.created.biquads.slice(0, 4).every((f) => f.Q.value === 40)).toBe(true)
+  })
+
+  it('draws more drops in heavier rain', () => {
+    const drizzle = new FakeAudioContext()
+    new RainChannel(asCtx(drizzle)).update(
+      { level: 0.2, density: 0.02, rate: 0.2, basePitch: 220 },
+      0,
+    )
+    const downpour = new FakeAudioContext()
+    new RainChannel(asCtx(downpour)).update(
+      { level: 1, density: 1, rate: 10, basePitch: 220 },
+      0,
+    )
+    expect(downpour.created.sources.length).toBeGreaterThan(drizzle.created.sources.length)
+  })
+
+  it('gives drops a size dependent impact band through the surface', () => {
+    const fake = new FakeAudioContext()
+    const channel = new RainChannel(asCtx(fake), 'wood')
+    channel.update({ level: 0.6, density: 0.4, rate: 4, basePitch: 220 }, 0)
+    const bands = fake.created.biquads.filter(
+      (f) => f.type === 'bandpass' && f.Q.value < 10,
+    )
+    expect(bands.length).toBeGreaterThan(0)
+    for (const band of bands) {
+      expect(band.frequency.value).toBeGreaterThanOrEqual(300)
+      expect(band.frequency.value).toBeLessThanOrEqual(9000)
+    }
   })
 })
 
@@ -54,6 +92,14 @@ describe('PressureChannel', () => {
     expect(fake.created.delays[0]!.delayTime.value).toBeCloseTo(1 / 80)
     expect(fake.created.gains[0]!.gain.value).toBeCloseTo(0.93)
   })
+
+  it('opens its output so the pipe can sound', () => {
+    const fake = new FakeAudioContext()
+    const channel = new PressureChannel(asCtx(fake))
+    channel.update({ level: 0.35, targetHz: 80 }, 0)
+    expect(channel.output.gain.value).toBe(1)
+    expect(fake.created.gains[2]!.gain.value).toBeCloseTo(0.35)
+  })
 })
 
 describe('ThunderChannel', () => {
@@ -65,6 +111,23 @@ describe('ThunderChannel', () => {
     expect(freqs.some((f) => f >= 60 && f <= 180)).toBe(true)
     expect(freqs.some((f) => f > 1000)).toBe(true)
     expect(fake.created.sources.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('rolls the rumble through two ground reflections', () => {
+    const fake = new FakeAudioContext()
+    const channel = new ThunderChannel(asCtx(fake))
+    channel.fire({ type: 'thunder-crack', strength: 0.6 })
+    expect(fake.created.delays.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shadows a distant strike more than a close one', () => {
+    const near = new FakeAudioContext()
+    new ThunderChannel(asCtx(near)).fire({ type: 'thunder-crack', strength: 1 })
+    const far = new FakeAudioContext()
+    new ThunderChannel(asCtx(far)).fire({ type: 'thunder-crack', strength: 0.1 })
+    const nearTop = near.created.biquads[0]!.frequency.value
+    const farTop = far.created.biquads[0]!.frequency.value
+    expect(farTop).toBeLessThan(nearTop)
   })
 })
 

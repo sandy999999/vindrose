@@ -19,6 +19,7 @@ export interface WeatherSnapshot {
 
 interface OpenMeteoCurrent {
   time: string
+  interval?: number
   temperature_2m: number
   relative_humidity_2m: number
   precipitation: number
@@ -83,7 +84,9 @@ function parse(body: OpenMeteoResponse): WeatherSnapshot {
       temperature: current.temperature_2m,
       humidity: current.relative_humidity_2m,
       pressure: current.pressure_msl,
-      precipitation: current.precipitation,
+      // The current block reports precipitation over its interval (15 minutes
+      // by default), while the domain maps an hourly rate.
+      precipitation: current.precipitation * (3600 / (current.interval ?? 900)),
       cloudCover: current.cloud_cover,
       weatherCode: current.weather_code,
     },
@@ -99,6 +102,7 @@ export async function fetchWeather(
   url.searchParams.set('latitude', String(lat))
   url.searchParams.set('longitude', String(lon))
   url.searchParams.set('current', CURRENT_FIELDS)
+  url.searchParams.set('wind_speed_unit', 'ms')
   url.searchParams.set('hourly', 'pressure_msl')
   url.searchParams.set('past_days', '1')
   url.searchParams.set('timezone', 'auto')

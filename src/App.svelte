@@ -226,12 +226,14 @@
         master={view.master}
         frozen={view.frozen}
         allMuted={allMuted}
+        soundMode={view.soundMode}
         onPlay={() => void session.play()}
         onPause={() => session.pause()}
         onRecord={() => void toggleRecording()}
         onMaster={(value) => session.setMaster(value)}
         onToggleMuteAll={() => session.toggleMuteAll()}
         onToggleFreeze={() => session.toggleFreeze()}
+        onSoundMode={(mode) => session.setSoundMode(mode)}
       />
 
       <LiveTrace reading={view.reading} place={view.place} />
