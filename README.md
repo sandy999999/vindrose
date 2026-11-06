@@ -1,8 +1,13 @@
 # Vindrose
 
+**[Try it live](https://sandy999999.github.io/vindrose/)**
+
 Live weather, turned into generative music. Pick a place on the map, hear
 its current conditions, and record what you hear. Nothing is pre-rendered:
 every sound comes from the reading the Open-Meteo API returned a moment ago.
+
+The live site is built from `main` and deployed to GitHub Pages by
+`.github/workflows/deploy.yml`.
 
 ## Setup
 
@@ -70,6 +75,8 @@ height.
   while playing.
 - **Record** — starts and stops the WAV; the clock counts the take.
 - **freeze** — stops weather events; the bed keeps playing.
+- **Weather only / Weather + music** — silences the pad and motif without
+  moving their faders; the choice is remembered.
 
 ## Browser support
 
